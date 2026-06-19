@@ -17,7 +17,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -101,16 +100,6 @@ def _write_part(result: dict, part_path: str) -> None:
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(p)
-
-
-def _load_paper_figure_module():
-    module_path = PROJECT_ROOT / "paper" / "scripts" / "gen_paper_figures.py"
-    spec = importlib.util.spec_from_file_location("paper_gen_figures", module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 # ── cross-model — decode + prefill cycles (cold-start vs steady-state) ──
@@ -321,22 +310,6 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
 
 
 def render_cross_model(output_dir: Path) -> None:
-    try:
-        paper_figures = _load_paper_figure_module()
-        paper_figures.CROSS_MODEL_DECODE_CACHE = output_dir / DECODE_JSON
-        paper_figures.CROSS_MODEL_PREFILL_CACHE = output_dir / PREFILL_JSON
-        figure_dir = output_dir / FIGURE_DIRNAME
-        paper_figures.gen_f4(figure_dir)
-        for ext in ("pdf", "png"):
-            legacy_path = figure_dir / f"f4_{CROSS_MODEL_FIGURE_NAME}.{ext}"
-            path = figure_dir / f"{CROSS_MODEL_FIGURE_NAME}.{ext}"
-            if legacy_path.exists():
-                legacy_path.replace(path)
-                print(f"saved figure: {path}")
-        return
-    except (FileNotFoundError, ImportError, ModuleNotFoundError):
-        pass
-
     C_BAR_A = "#b8c8dc"
     C_BAR_B = "#d8c0b0"
 
