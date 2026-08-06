@@ -1,0 +1,29 @@
+PIMScope
+========
+
+The PIMScope-owned source files in this repository are released under the MIT
+License in LICENSE.
+
+Ramulator 2.1
+-------------
+
+The `ramulator2/` directory is a Git submodule of the maintained
+https://github.com/TtitiO/ramulator2 fork. It contains Ramulator 2.1 from
+CMU-SAFARI plus the PIMScope LPDDR5-PIM implementation. Ramulator is distributed
+under its own MIT license; see `ramulator2/LICENSE` and its repository history
+for copyright and attribution details.
+
+Build dependencies
+------------------
+
+Ramulator's CMake build fetches or uses the following third-party projects,
+each under its own license:
+
+- yaml-cpp: https://github.com/jbeder/yaml-cpp
+- fmt: https://github.com/fmtlib/fmt
+- nanobind: https://github.com/wjakob/nanobind
+- argparse: https://github.com/p-ranav/argparse
+
+This NOTICE is informational and does not replace the corresponding upstream
+license files. Generated experiment results and figures should retain their
+provenance metadata and cite both PIMScope and Ramulator as appropriate.

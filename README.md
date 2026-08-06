@@ -1,75 +1,183 @@
-# PIMScope: Augmenting Ramulator 2.0 with Command-Level LPDDR-PIM for Transformer Inference
+# PIMScope: Command-Level LPDDR-PIM Simulation for Transformer Inference
 
-Extensions and modifications to [Ramulator 2.0](https://github.com/CMU-SAFARI/ramulator2).
+PIMScope is an open-source LPDDR5-PIM extension built on
+[Ramulator 2.1](https://github.com/CMU-SAFARI/ramulator2). It adds explicit
+single-bank and rank-scoped PIM commands, shared-MPU resource modeling,
+command/completion timing separation, PIM-aware trace frontends, workload
+lowering, and structural power-accounting hooks.
 
-> The `ramulator2/` directory contains a vendored copy of Ramulator 2.0 (v2.1 branch from `CMU-SAFARI/ramulator2`) with our modifications applied. The original Ramulator 2.0 is available at [https://github.com/CMU-SAFARI/ramulator2](https://github.com/CMU-SAFARI/ramulator2).
+`ramulator2/` is a Git submodule pinned to a validated commit of the maintained
+[`TtitiO/ramulator2`](https://github.com/TtitiO/ramulator2) fork. The fork's
+`main` branch is based on current CMU-SAFARI `main`; PIMScope changes are kept
+in explicit commits on top of that upstream history rather than replacing
+upstream infrastructure or tests.
 
-# Quick Start
+## Clone
 
-Use the project-root virtual environment for builds, tests, and paper artifact
-reproduction.
+Use a recursive clone so the simulator fork is checked out at the exact commit
+validated by this repository:
 
-## Ubuntu Setup
+```bash
+git clone --recurse-submodules https://github.com/TtitiO/PIMScope.git
+cd PIMScope
+```
 
-The following commands assume Ubuntu 24.04 or a similar recent Ubuntu release
-where `python3` is Python 3.11 or newer:
+For an existing clone:
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+The submodule URL is public HTTPS; read-only users and CI do not need GitHub SSH
+credentials.
+
+## Supported environment
+
+The documented reference environment is Ubuntu 24.04 with Python 3.11 or newer,
+CMake 3.14 or newer, and a C++20 compiler. Verify the tools before building:
+
+```bash
+python3 --version
+cmake --version                 # must be >= 3.14
+c++ --version                   # must support C++20
+git submodule status
+```
+
+On Ubuntu, install the basic host tools with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake python3 python3-venv python3-pip
+sudo apt-get install -y build-essential cmake python3 python3-dev python3-venv python3-pip
 ```
 
-Create or refresh the project-root environment from the repository root:
+## Build and install
+
+Create one project-root virtual environment for the simulator and artifact
+scripts:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -U pip setuptools wheel
 .venv/bin/python -m pip install -e .
+.venv/bin/python -m pip install -r ramulator2/requirements-dev.txt
+.venv/bin/python -m pip install --no-build-isolation -e ramulator2
 ```
 
-## Compile the Modified Ramulator2 Backend
-
-Build the vendored simulator with CMake, but point CMake at the project-root
-Python interpreter. This keeps the compiled Python extension and the
-reproduction scripts on the same environment:
+Build the public runtime backend. The test-only native harness is disabled by
+default and is not required by examples or artifact reproduction. If
+`.venv/bin/cmake` is unavailable, replace it with the verified system `cmake`
+command:
 
 ```bash
-cd ramulator2
-mkdir -p build
-cd build
-cmake -DPython_EXECUTABLE=../../.venv/bin/python ..
-make -j"$(nproc)"
-cd ..
-../.venv/bin/python -m pip install --no-build-isolation -e .
-PYTHONPATH=python ../.venv/bin/python -m ramulator codegen
-cd ..
+cmake -S ramulator2 -B ramulator2/build \
+  -DPython_EXECUTABLE="$PWD/.venv/bin/python" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build ramulator2/build -j"$(nproc)"
 ```
 
-Sanity check the build with Ramulator's example trace:
+If your default compiler produces binaries requiring a newer GLIBC than the
+target machine, select an older supported compiler explicitly, for example with
+`-DCMAKE_CXX_COMPILER=/path/to/clang++`.
+
+Run the two smoke examples:
 
 ```bash
-cd ramulator2
-PYTHONPATH=python ../.venv/bin/python examples/example_config.py
-cd ..
+(
+  cd ramulator2
+  ../.venv/bin/python examples/example_config.py
+  ../.venv/bin/python examples/lpddr5_pim_example_config.py
+)
 ```
 
-## Reproduce the Paper Results
+## Validation
 
-After the build succeeds, follow [`scripts/README.md`](scripts/README.md) to
-reproduce the generated data, figures, and tables under `results/`.
+The upstream Ramulator test infrastructure is preserved. Tests that use the
+native controller/device harness require an opt-in build:
 
-## Virtual Environment Policy
+```bash
+cmake -S ramulator2 -B ramulator2/build-tests \
+  -DPython_EXECUTABLE="$PWD/.venv/bin/python" \
+  -DRAMULATOR_TEST_BINDINGS=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build ramulator2/build-tests -j"$(nproc)"
+(
+  cd ramulator2
+  ../.venv/bin/python -m pytest -q \
+    tests/controller_scheduling \
+    tests/device_timings \
+    tests/smoke \
+    tests/unit_tests \
+    tests/test_LPDDR5_params.py \
+    tests/test_lpddr5_pim_config.py \
+    tests/test_REFpb.py
+)
+```
 
-`.venv/` at the repository root is the canonical environment for this project.
-If you recreate it or switch Python versions, remove or recreate
-`ramulator2/build/` before running CMake again so the cached
-`Python_EXECUTABLE` points at the current environment.
+See [`ramulator2/README.md`](ramulator2/README.md) for the complete simulator
+guide and test suite.
+
+## Reproduce the paper artifacts
+
+After the runtime build succeeds, follow [`scripts/README.md`](scripts/README.md).
+The short form is:
+
+```bash
+.venv/bin/pimscope-artifacts --all --workers 8
+```
+
+The direct form remains supported:
+
+```bash
+.venv/bin/python scripts/gen_figures.py --all --workers 8
+```
+
+Generated data and figures are written under `results/`, which is intentionally
+ignored as local/generated state. Artifact JSON uses repository-relative cache
+paths rather than machine-specific absolute paths.
 
 ## Docker
 
+The maintained container configuration is inside the simulator submodule. Run
+Compose from that directory so its relative build context is correct:
+
 ```bash
-docker pull ubuntu:24.04
-docker compose build --no-cache
-docker compose up -d
+cd ramulator2
+docker compose up -d --build --wait
 docker compose exec ramulator2 bash
 ```
+
+## Modeling scope
+
+PIMScope's extra opcodes are explicit simulator abstractions, not claims that
+each name is a literal public JEDEC command. In particular:
+
+- command launch interval and request completion latency are separate;
+- per-bank completion includes pipeline, movement, and writeback residency;
+- `shared_mpu_serial` serializes banks that share an MPU;
+- `PIM_MAC_AB` is rank-scoped and completes according to the shared-MPU model;
+- all-bank mode transitions and refresh interactions are modeled explicitly;
+- datatype-driven timing behavior is opt-in and validated.
+
+The exact execution contract and statistics are documented in the
+[LPDDR5-PIM section of the Ramulator fork guide](ramulator2/README.md#lpddr5-pim-execution-semantics).
+
+## Technical reference
+
+The current paper is available at [`paper/PIMScope_camera_ready.pdf`](paper/PIMScope_camera_ready.pdf).
+The released PDF has resolved citations and cross-references and embedded fonts.
+
+## Updating Ramulator
+
+To synchronize future CMU-SAFARI changes safely:
+
+1. preserve a Git bundle and archives of the current PIMScope implementation;
+2. fetch `https://github.com/CMU-SAFARI/ramulator2` as `upstream`;
+3. integrate upstream on an isolated worktree/branch;
+4. keep upstream infrastructure/tests and port only PIMScope-owned behavior;
+5. build, run focused and broad tests, run examples, and validate a fresh
+   recursive clone;
+6. push the validated fork commit, then advance this repository's immutable
+   submodule gitlink.
+
+Do not update the parent gitlink to an unpushed or unvalidated fork commit.

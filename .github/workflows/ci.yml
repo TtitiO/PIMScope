@@ -1,0 +1,63 @@
+name: clean-clone-ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out PIMScope and pinned Ramulator submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake python3-dev python3-venv
+
+      - name: Create environment and install packages
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -U pip setuptools wheel
+          .venv/bin/python -m pip install -e .
+          .venv/bin/python -m pip install -r ramulator2/requirements-dev.txt
+          .venv/bin/python -m pip install --no-build-isolation -e ramulator2
+
+      - name: Build runtime and optional test bindings
+        run: |
+          cmake -S ramulator2 -B ramulator2/build-ci \
+            -DPython_EXECUTABLE="$PWD/.venv/bin/python" \
+            -DRAMULATOR_TEST_BINDINGS=ON \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build ramulator2/build-ci -j2
+
+      - name: Verify generated code did not change tracked sources
+        run: git -C ramulator2 diff --exit-code
+
+      - name: Run project-owned regression tests
+        working-directory: ramulator2
+        run: |
+          ../.venv/bin/python -m pytest -q \
+            tests/controller_scheduling \
+            tests/device_timings \
+            tests/smoke \
+            tests/unit_tests \
+            tests/test_LPDDR5_params.py \
+            tests/test_lpddr5_pim_config.py \
+            tests/test_REFpb.py
+
+      - name: Run examples and artifact CLI checks
+        run: |
+          (cd ramulator2 && ../.venv/bin/python examples/example_config.py)
+          (cd ramulator2 && ../.venv/bin/python examples/lpddr5_pim_example_config.py)
+          .venv/bin/pimscope-artifacts --help
+          .venv/bin/python scripts/gen_figures.py --help
+
+      - name: Check clean parent tree
+        run: git diff --exit-code

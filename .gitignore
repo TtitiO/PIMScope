@@ -1,1 +1,25 @@
+# Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Native/CMake builds
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+*.so
+*.dylib
+
+# Generated experiment artifacts
+results/
+*.out
+
+# Tool/editor state
+.ipynb_checkpoints/
+.vscode/

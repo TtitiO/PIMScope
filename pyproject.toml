@@ -1,10 +1,20 @@
 [project]
-name = "ramulator2-ext"
+name = "pimscope"
 version = "0.1.0"
-description = "LPDDR5-PIM backend extension and figure generation for Ramulator 2.0"
+description = "Command-level LPDDR5-PIM simulation and artifact generation on Ramulator 2.1"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "matplotlib>=3.7",
     "numpy>=1.24",
 ]
+
+[project.scripts]
+pimscope-artifacts = "scripts.gen_figures:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scripts", "scripts.lib"]

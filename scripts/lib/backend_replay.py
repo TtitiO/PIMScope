@@ -23,8 +23,6 @@ LPDDR5_PIM_CONFIG = {
     "org_preset": "LPDDR5_8Gb_x16",
     "timing_preset": "LPDDR5_6400",
     "dram_kwargs": {
-        "pim_enabled": True,
-        "pim_mode": "bank",
         "pim_datatype": "int8",
         "pim_banks_per_mpu": 2,
         "pim_mac_execution_model": "shared_mpu_serial",
@@ -144,6 +142,7 @@ def replay_concrete_trace(
         mem = _make_mem(dram)
         sim = ramulator.Simulation(frontend, mem)
         sim.run()
+        sim.finalize()
         stats = sim.stats
 
     ctrl = stats.get("memory_system", {}).get("controller", {})
@@ -172,7 +171,7 @@ def replay_concrete_trace(
         "pim_simultaneous_active_banks_peak": _s("pim_simultaneous_active_banks_peak"),
         "pim_banks_per_mpu": _s("pim_banks_per_mpu"),
         "effective_mpu_groups": _s("effective_mpu_groups"),
-        "pim_ab_mac_latency_cycles": _s("pim_ab_mac_latency_cycles"),
+        "pim_ab_completion_latency_cycles": _s("pim_ab_completion_latency_cycles"),
         "num_bank_timing_blocked_cycles": _s("num_bank_timing_blocked_cycles"),
         "num_mpu_group_busy_blocked_cycles": _s("num_mpu_group_busy_blocked_cycles"),
     }

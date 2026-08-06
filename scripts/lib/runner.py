@@ -1,4 +1,4 @@
-"""Direct Ramulator2 runner — instantiate components without the test registry."""
+"""Small direct Ramulator 2.1 runner used for smoke and observability checks."""
 
 from __future__ import annotations
 
@@ -12,25 +12,9 @@ from pathlib import Path
 DEFAULT_CFG = {
     "org_preset": "LPDDR5_8Gb_x16",
     "timing_preset": "LPDDR5_6400",
-    "dram_kwargs": {
-        "pim_enabled": True,
-        "pim_mode": "bank",
-        "pim_datatype": "int8",
-    },
+    "dram_kwargs": {"pim_datatype": "int8"},
     "frontend_clock_ratio": 4,
-    "stream_cols": 8,
-    "pim_mode": True,
-    "num_pim_requests": 4096,
-    "pim_distribution_mode": "same_bank",
-    "pim_same_bank": True,
-    "pim_dependency_count": 1,
-    "pim_bank_group_size": 0,
-    "pim_bank_sequence": [],
-    "pim_bank_sequence_order": "frontend",
-    "pim_burst_length": 1,
-    "pim_row_start": 0,
-    "pim_row_count": 1,
-    "pim_split_all_bank": False,
+    "stream_cls": 8,
 }
 
 COMMANDS_TO_COUNT = [
@@ -52,16 +36,8 @@ def _merge_cfg(base: dict, override: dict | None) -> dict:
     return merged
 
 
-def _serialize_int_list(values) -> str:
-    return ",".join(str(v) for v in values)
-
-
 def _extract_dram_layout(dram) -> dict:
-    """Extract the device's multi-level bank decomposition from a DRAM object.
-
-    Returns bank_positions, bank_counts, and total_bank_units so callers can
-    map flat bank indices 0..N-1 into the addr_vec correctly.
-    """
+    """Extract the device's multi-level bank decomposition."""
     cls = type(dram)
     level_names = list(cls.levels.keys())
     org_dict, _ = dram.resolve()
@@ -86,6 +62,8 @@ def _extract_dram_layout(dram) -> dict:
     total_bank_units = 1
     for count in bank_counts:
         total_bank_units *= count
+    internal_prefetch_size = int(cls.internal_prefetch_size)
+    num_cols = int(org_counts[col_idx])
     return {
         "addr_vec_size": len(level_names),
         "bank_positions": bank_positions,
@@ -93,8 +71,10 @@ def _extract_dram_layout(dram) -> dict:
         "total_bank_units": total_bank_units,
         "row_pos": row_idx,
         "col_pos": col_idx,
-        "num_rows": org_counts[row_idx],
-        "num_cols": org_counts[col_idx],
+        "num_rows": int(org_counts[row_idx]),
+        "num_cols": num_cols,
+        "internal_prefetch_size": internal_prefetch_size,
+        "num_cls": num_cols // internal_prefetch_size,
     }
 
 
@@ -103,18 +83,6 @@ def _make_dram(ramulator, cfg: dict):
         org_preset=cfg["org_preset"],
         timing_preset=cfg["timing_preset"],
         **cfg.get("dram_kwargs", {}),
-    )
-
-
-def _pim_request_ids(dram, *, split_all_bank: bool = False) -> tuple[int, int, int]:
-    names = list(type(dram).supported_requests.keys())
-    pim_compute = names.index("PIMCompute") if "PIMCompute" in names else -1
-    if not split_all_bank:
-        return pim_compute, -1, -1
-    return (
-        pim_compute,
-        names.index("PIMLoadAll") if "PIMLoadAll" in names else -1,
-        names.index("PIMComputeAll") if "PIMComputeAll" in names else -1,
     )
 
 
@@ -136,7 +104,6 @@ def _read_command_traces(prefix: Path) -> list[dict]:
         with trace_path.open(newline="", encoding="utf-8") as handle:
             commands = [row["command"] for row in csv.DictReader(handle)]
         traces.append({
-            "path": str(trace_path),
             "channel": trace_path.suffix.replace(".ch", ""),
             "command_count": len(commands),
             "command_counts": dict(sorted(Counter(commands).items())),
@@ -150,7 +117,8 @@ def _attach_plugins(ramulator, tmpdir: Path):
     trace_prefix = tmpdir / "command_trace.csv"
     return [
         ramulator.controller_plugin.CommandCounter(
-            commands_to_count=COMMANDS_TO_COUNT, path=str(counts_path)),
+            commands_to_count=COMMANDS_TO_COUNT, path=str(counts_path)
+        ),
         ramulator.controller_plugin.CmdTraceRecorder(path=str(trace_prefix)),
     ]
 
@@ -160,11 +128,11 @@ def _collect_observability(stats: dict, tmpdir: Path, cfg: dict) -> dict:
     selected = {}
     for key in (
         "cycles", "num_pim_reqs_served", "num_issued_pim_mac",
-        "avg_pim_latency", "avg_pim_service_latency",
-        "avg_pim_launch_wait", "avg_pim_response_latency",
-        "pim_capacity_stalls", "pim_mpu_group_stalls", "pim_dependency_stalls",
-        "pim_inflight_peak", "pim_banks_per_mpu", "pim_mpu_group_count",
-        "total_banks", "effective_mpu_groups",
+        "avg_pim_latency", "avg_pim_service_latency", "avg_pim_launch_wait",
+        "avg_pim_response_latency", "pim_capacity_stalls", "pim_mpu_group_stalls",
+        "pim_dependency_stalls", "pim_inflight_peak", "pim_banks_per_mpu",
+        "pim_mpu_group_count", "total_banks", "effective_mpu_groups",
+        "pim_ab_completion_latency_cycles",
     ):
         if key in ctrl:
             selected[key] = ctrl[key]
@@ -198,43 +166,31 @@ def run_single(
     dram=None,
     cfg_override: dict | None = None,
     nop: int = 1,
-    num_probes: int = 10000,
-    warmup: int = 10000,
+    num_probes: int = 100,
+    warmup: int = 100,
     read_ratio: int = 100,
     observability_dir: Path | None = None,
 ) -> dict:
-    """Run one LatencyThroughputTrace LPDDR5-PIM simulation point."""
+    """Run one host-traffic LPDDR5-PIM smoke point.
+
+    PIM command replay is handled by :mod:`scripts.lib.backend_replay`. This
+    helper intentionally uses Ramulator 2.1's generic latency-throughput
+    frontend and no longer passes parameters removed from that frontend.
+    """
     import ramulator
 
     cfg = _merge_cfg(DEFAULT_CFG, cfg_override)
     dram = dram if dram is not None else _make_dram(ramulator, cfg)
     layout = _extract_dram_layout(dram)
-    pim_request, pim_load, pim_compute_all = _pim_request_ids(
-        dram, split_all_bank=bool(cfg.get("pim_split_all_bank", False)))
-
     frontend = ramulator.frontend.LatencyThroughputTrace(
         clock_ratio=int(cfg["frontend_clock_ratio"]),
         nop_counter=int(nop),
         num_probe_requests=int(num_probes),
-        pim_mode=bool(cfg.get("pim_mode", True)),
-        num_pim_requests=int(cfg.get("num_pim_requests", 4096)),
-        pim_distribution_mode=str(cfg.get("pim_distribution_mode", "same_bank")),
-        pim_same_bank=bool(cfg.get("pim_same_bank", True)),
-        pim_dependency_count=int(cfg.get("pim_dependency_count", 1)),
-        pim_bank_group_size=int(cfg.get("pim_bank_group_size", 0)),
-        pim_bank_sequence=_serialize_int_list(cfg.get("pim_bank_sequence", [])),
-        pim_bank_sequence_order=str(cfg.get("pim_bank_sequence_order", "frontend")),
-        pim_burst_length=int(cfg.get("pim_burst_length", 1)),
-        pim_row_start=int(cfg.get("pim_row_start", 0)),
-        pim_row_count=int(cfg.get("pim_row_count", 1)),
-        pim_request_type_id=pim_request,
-        pim_load_request_type_id=pim_load,
-        pim_compute_all_request_type_id=pim_compute_all,
-        pim_split_all_bank=bool(cfg.get("pim_split_all_bank", False)),
+        latency_sample_count=int(num_probes),
         warmup_cycles=int(warmup),
         seed=12345,
         read_ratio=int(read_ratio),
-        stream_cols=int(cfg.get("stream_cols", 8)),
+        stream_cls=int(cfg.get("stream_cls", 8)),
         **layout,
     )
     with tempfile.TemporaryDirectory(dir=observability_dir) as tmp:
@@ -242,7 +198,9 @@ def run_single(
         mem = _make_controller_and_mem(ramulator, dram, _attach_plugins(ramulator, tmpdir))
         sim = ramulator.Simulation(frontend, mem)
         sim.run()
+        sim.finalize()
         stats = sim.stats
-        stats.setdefault("evidence", {})["pim_energy_observability"] = \
-            _collect_observability(stats, tmpdir, cfg)
+        stats.setdefault("evidence", {})["pim_energy_observability"] = _collect_observability(
+            stats, tmpdir, cfg
+        )
         return stats

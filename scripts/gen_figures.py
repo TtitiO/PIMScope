@@ -19,16 +19,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
-from typing import Iterable
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 RAMULATOR2_DIR = PROJECT_ROOT / "ramulator2"
-sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(RAMULATOR2_DIR / "python"))
 sys.path.insert(0, str(RAMULATOR2_DIR))
 
@@ -89,6 +89,25 @@ def _save(fig: plt.Figure, output_dir: Path, name: str) -> None:
     plt.close(fig)
 
 
+def _git_revision(repo: Path) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def _provenance(**extra) -> dict:
+    return {
+        "date": date.today().isoformat(),
+        "generator": "scripts/gen_figures.py",
+        "pimscope_commit": _git_revision(PROJECT_ROOT),
+        "ramulator2_commit": _git_revision(RAMULATOR2_DIR),
+        **extra,
+    }
+
+
 def _write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -125,7 +144,7 @@ def _cross_model_part_path(output_dir: Path, model: str, phase: str, mode: str) 
 
 
 def _run_cross_model_task(task: dict) -> dict:
-    from lib.backend_replay import generate_and_replay
+    from scripts.lib.backend_replay import generate_and_replay
 
     result = generate_and_replay(
         task["phase"], task["model_key"],
@@ -140,8 +159,7 @@ def _run_cross_model_task(task: dict) -> dict:
 
 
 def collect_cross_model(output_dir: Path, *, force: bool = False, workers: int = 1) -> None:
-    from lib.backend_replay import prefill_formula, pim_cfg_shared, _infer_model_family
-    from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
+    from scripts.lib.backend_replay import pim_cfg_shared
 
     decode_path = output_dir / DECODE_JSON
     prefill_path = output_dir / PREFILL_JSON
@@ -214,7 +232,7 @@ def _run_tasks(tasks: list[dict], workers: int, fn, label, tag: str) -> None:
 
 
 def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Path) -> None:
-    from lib.backend_replay import prefill_formula, _infer_model_family
+    from scripts.lib.backend_replay import _infer_model_family
     from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
 
     decode_rows: list[dict] = []
@@ -241,20 +259,20 @@ def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Pat
                 "replay_status": "PASS" if data.get("replay_ok") else "FAIL",
                 "data_source": "backend_replay",
                 "dimension_scope": "real",
-                "source_cache": str(part)})
+                "source_cache": part.relative_to(PROJECT_ROOT).as_posix()})
     _write_json(decode_path, {
         "figure_id": "fig18_cross_model_decode_cycles",
         "description": "Cross-model dense decode backend replay cycles",
         "phase": "decode",
         "metric_units": {"cycles": "cycles", "runtime_ns": "ns"},
-        "provenance": {"date": date.today().isoformat(), "generator": "scripts/gen_figures.py"},
+        "provenance": _provenance(),
         "rows": decode_rows})
     print(f"wrote {decode_path} ({len(decode_rows)} rows)")
     _assemble_cross_model_prefill(output_dir, prefill_path)
 
 
 def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
-    from lib.backend_replay import prefill_formula, _infer_model_family
+    from scripts.lib.backend_replay import prefill_formula, _infer_model_family
     from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
 
     P = CROSS_MODEL_PREFILL_PROMPT_LEN
@@ -302,8 +320,7 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
         "description": "Cross-model dense prefill backend replay cycles",
         "phase": "prefill",
         "metric_units": {"cycles": "cycles", "runtime_ns": "ns"},
-        "provenance": {"date": date.today().isoformat(), "generator": "scripts/gen_figures.py",
-                       "prompt_len": P},
+        "provenance": _provenance(prompt_len=P),
         "rows": prefill_rows,
         "caveats": ["Simulator-diagnostic cycles, not silicon-calibrated"]})
     print(f"wrote {prefill_path} ({len(prefill_rows)} rows)")
@@ -381,7 +398,7 @@ def _pim_sharing_part_path(output_dir: Path, model: str, label: str) -> Path:
 
 
 def _run_pim_sharing_task(task: dict) -> dict:
-    from lib.backend_replay import generate_and_replay
+    from scripts.lib.backend_replay import generate_and_replay
 
     result = generate_and_replay(
         task["phase"], task["model_key"],
@@ -436,7 +453,7 @@ def collect_pim_sharing(output_dir: Path, *, force: bool = False, workers: int =
 
 
 def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
-    from lib.backend_replay import _infer_model_family
+    from scripts.lib.backend_replay import _infer_model_family
     from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
 
     rows: list[dict] = []
@@ -479,8 +496,12 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
             "slowdown": round(slowdown, 4),
             "pim_simultaneous_active_banks_peak_k1": int(k1.get("pim_simultaneous_active_banks_peak", 0) or 0),
             "pim_simultaneous_active_banks_peak_k2": int(k2.get("pim_simultaneous_active_banks_peak", 0) or 0),
-            "pim_ab_mac_latency_cycles_k1": int(k1.get("pim_ab_mac_latency_cycles", 0) or 0),
-            "pim_ab_mac_latency_cycles_k2": int(k2.get("pim_ab_mac_latency_cycles", 0) or 0),
+            "pim_ab_completion_latency_cycles_k1": int(
+                k1.get("pim_ab_completion_latency_cycles", 0) or 0
+            ),
+            "pim_ab_completion_latency_cycles_k2": int(
+                k2.get("pim_ab_completion_latency_cycles", 0) or 0
+            ),
             "pim_mpu_group_stalls_k2": mpu_stalls_k2,
             "pim_dependency_stalls_k2": int(k2.get("pim_dependency_stalls", 0) or 0),
             "pim_capacity_stalls_k2": int(k2.get("pim_capacity_stalls", 0) or 0),
@@ -493,7 +514,7 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
     _write_json(path, {
         "schema_version": 1,
         "description": "Transformer-trace PIM comparison: CD-PIM dedicated per-bank (k=1) vs shared-MPU 2-banks/MPU (k=2)",
-        "provenance": {"date": date.today().isoformat(), "generator": "scripts/gen_figures.py"},
+        "provenance": _provenance(),
         "rows": rows})
     print(f"wrote {path} ({len(rows)} rows)")
 
