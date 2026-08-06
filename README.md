@@ -66,8 +66,8 @@ python3 -m venv .venv
 
 Build the public runtime backend. The test-only native harness is disabled by
 default and is not required by examples or artifact reproduction. If
-`.venv/bin/cmake` is unavailable, replace it with the verified system `cmake`
-command:
+the virtual environment does not provide a CMake wrapper, use the verified
+system `cmake` command:
 
 ```bash
 cmake -S ramulator2 -B ramulator2/build \
