@@ -152,14 +152,15 @@ def replay_concrete_trace(
     pim_mac_ab = int(ctrl.get("num_issued_pim_mac_ab", 0) or 0)
     replay_ok = cycles > 0 and (pim_mac > 0 or pim_mac_ab > 0)
 
+    opcode_counts = count_concrete_opcodes(concrete_records)
     _s = lambda k: int(ctrl.get(k, 0) or 0)
     return {
         "cycles": cycles,
         "runtime_ns": cycles * tck_ns,
-        "command_counts": count_concrete_opcodes(concrete_records),
+        "command_counts": opcode_counts,
         "pim_mac_issued": pim_mac,
         "pim_mac_ab_issued": pim_mac_ab,
-        "pim_bcast_issued": int(ctrl.get("num_issued_pim_bcast", 0) or 0),
+        "pim_bcast_issued": opcode_counts.get("PIM_BCAST", 0),
         "replay_ok": replay_ok,
         "frontend_stats": {
             k: fe[k] for k in ("requests_issued", "pim_requests_completed",

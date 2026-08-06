@@ -58,6 +58,7 @@ jobs:
           (cd ramulator2 && ../.venv/bin/python examples/lpddr5_pim_example_config.py)
           .venv/bin/pimscope-artifacts --help
           .venv/bin/python scripts/gen_figures.py --help
+          .venv/bin/python -m pytest -q tests
 
       - name: Check clean parent tree
         run: git diff --exit-code

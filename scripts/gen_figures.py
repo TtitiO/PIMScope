@@ -17,11 +17,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import lru_cache
 from datetime import date
 from pathlib import Path
 
@@ -51,6 +53,7 @@ MODES = ("steady_state", "cold_start")
 C_EDGE = "#555555"
 C_GRID = "0.78"
 C_ANNOT = "0.35"
+CACHE_SCHEMA_VERSION = 1
 
 
 def _apply_style() -> None:
@@ -98,14 +101,49 @@ def _git_revision(repo: Path) -> str:
         return "unknown"
 
 
+@lru_cache(maxsize=None)
+def _source_fingerprint(repo: Path) -> str:
+    try:
+        diff = subprocess.check_output(
+            ["git", "-C", str(repo), "diff", "--binary", "HEAD"],
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        diff = b""
+    payload = _git_revision(repo).encode() + b"\0" + diff
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _provenance(**extra) -> dict:
     return {
         "date": date.today().isoformat(),
         "generator": "scripts/gen_figures.py",
         "pimscope_commit": _git_revision(PROJECT_ROOT),
         "ramulator2_commit": _git_revision(RAMULATOR2_DIR),
+        "pimscope_source_fingerprint": _source_fingerprint(PROJECT_ROOT),
+        "ramulator2_source_fingerprint": _source_fingerprint(RAMULATOR2_DIR),
         **extra,
     }
+
+
+def _cache_fingerprint(task: dict) -> str:
+    cache_task = {k: v for k, v in task.items() if k != "part_path"}
+    payload = {
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "task": cache_task,
+        "pimscope_source_fingerprint": _source_fingerprint(PROJECT_ROOT),
+        "ramulator2_source_fingerprint": _source_fingerprint(RAMULATOR2_DIR),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _part_cache_matches(path: Path, task: dict) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return data.get("_cache", {}).get("fingerprint") == _cache_fingerprint(task)
 
 
 def _write_json(path: Path, payload) -> None:
@@ -113,9 +151,14 @@ def _write_json(path: Path, payload) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _write_part(result: dict, part_path: str) -> None:
-    p = Path(part_path)
+def _write_part(result: dict, task: dict) -> None:
+    p = Path(task["part_path"])
     p.parent.mkdir(parents=True, exist_ok=True)
+    result = dict(result)
+    result["_cache"] = {
+        "schema_version": CACHE_SCHEMA_VERSION,
+        "fingerprint": _cache_fingerprint(task),
+    }
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(p)
@@ -154,7 +197,7 @@ def _run_cross_model_task(task: dict) -> dict:
         pim_cfg_override=task.get("pim_cfg_override"),
         max_inflight_requests=task.get("max_inflight_requests", 1),
         mac_mode=task.get("mac_mode", "per_kind"))
-    _write_part(result, task["part_path"])
+    _write_part(result, task)
     return result
 
 
@@ -163,10 +206,6 @@ def collect_cross_model(output_dir: Path, *, force: bool = False, workers: int =
 
     decode_path = output_dir / DECODE_JSON
     prefill_path = output_dir / PREFILL_JSON
-    if not force and decode_path.exists() and prefill_path.exists():
-        print(f"[cross-model] using existing data: {decode_path}, {prefill_path}")
-        print(f"[cross-model] part cache: {output_dir / CROSS_MODEL_PARTS_DIRNAME}")
-        return
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / CROSS_MODEL_PARTS_DIRNAME).mkdir(parents=True, exist_ok=True)
 
@@ -175,25 +214,25 @@ def collect_cross_model(output_dir: Path, *, force: bool = False, workers: int =
     for model in CROSS_MODEL_DECODE_MODELS:
         for mode in MODES:
             part = _cross_model_part_path(output_dir, model, "decode", mode)
-            if not force and part.exists():
-                continue
-            tasks.append({
+            task = {
                 "model_key": model, "phase": "decode", "mode": mode,
                 "past_len": DECODE_PAST_LEN,
                 "materialize_weights": mode == "cold_start",
                 "part_path": str(part), "pim_cfg_override": pim_cfg,
-                "max_inflight_requests": 16, "mac_mode": "per_kind"})
+                "max_inflight_requests": 16, "mac_mode": "per_kind"}
+            if force or not _part_cache_matches(part, task):
+                tasks.append(task)
     for model in CROSS_MODEL_PREFILL_MODELS:
         for mode in MODES:
             part = _cross_model_part_path(output_dir, model, "prefill", mode)
-            if not force and part.exists():
-                continue
-            tasks.append({
+            task = {
                 "model_key": model, "phase": "prefill", "mode": mode,
                 "prompt_len": CROSS_MODEL_PREFILL_PROMPT_LEN,
                 "materialize_weights": mode == "cold_start",
                 "part_path": str(part), "pim_cfg_override": pim_cfg,
-                "max_inflight_requests": 16, "mac_mode": "per_kind"})
+                "max_inflight_requests": 16, "mac_mode": "per_kind"}
+            if force or not _part_cache_matches(part, task):
+                tasks.append(task)
 
     total = len(tasks)
     expected = (len(CROSS_MODEL_DECODE_MODELS) + len(CROSS_MODEL_PREFILL_MODELS)) * 2
@@ -215,20 +254,42 @@ def collect_cross_model(output_dir: Path, *, force: bool = False, workers: int =
 
 
 def _run_tasks(tasks: list[dict], workers: int, fn, label, tag: str) -> None:
+    failures: list[str] = []
     if workers <= 1:
         for idx, task in enumerate(tasks, 1):
-            fn(task)
-            print(f"[{tag}] {idx}/{len(tasks)}: {label(task)}", flush=True)
-        return
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        future_map = {pool.submit(fn, t): t for t in tasks}
-        for idx, future in enumerate(as_completed(future_map), 1):
-            task = future_map[future]
             try:
-                future.result()
+                fn(task)
                 print(f"[{tag}] {idx}/{len(tasks)}: {label(task)}", flush=True)
             except Exception as exc:
-                print(f"[{tag}] FAILED {idx}/{len(tasks)}: {label(task)}: {exc}", flush=True)
+                message = f"[{tag}] FAILED {idx}/{len(tasks)}: {label(task)}: {exc}"
+                failures.append(message)
+                print(message, flush=True)
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            future_map = {pool.submit(fn, t): t for t in tasks}
+            for idx, future in enumerate(as_completed(future_map), 1):
+                task = future_map[future]
+                try:
+                    future.result()
+                    print(f"[{tag}] {idx}/{len(tasks)}: {label(task)}", flush=True)
+                except Exception as exc:
+                    message = f"[{tag}] FAILED {idx}/{len(tasks)}: {label(task)}: {exc}"
+                    failures.append(message)
+                    print(message, flush=True)
+    if failures:
+        raise RuntimeError(
+            f"{tag}: {len(failures)} task(s) failed; refusing to assemble partial artifacts\n"
+            + "\n".join(failures)
+        )
+
+
+def _load_required_part(path: Path, *, description: str) -> dict:
+    if not path.exists():
+        raise RuntimeError(f"missing required {description}: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not data.get("replay_ok"):
+        raise RuntimeError(f"{description} did not pass backend replay: {path}")
+    return data
 
 
 def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Path) -> None:
@@ -240,10 +301,7 @@ def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Pat
         spec = get_model_spec(model) if model != "mixtral-8x7b" else None
         for mode in MODES:
             part = _cross_model_part_path(output_dir, model, "decode", mode)
-            if not part.exists():
-                print(f"  WARNING: missing decode part {part}")
-                continue
-            data = json.loads(part.read_text(encoding="utf-8"))
+            data = _load_required_part(part, description="decode part")
             model_name = spec.name if spec else "Mixtral-8x7B"
             decode_rows.append({
                 "model_name": model_name,
@@ -258,9 +316,15 @@ def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Pat
                 "num_layers": int(spec.num_layers) if spec else 32,
                 "replay_status": "PASS" if data.get("replay_ok") else "FAIL",
                 "data_source": "backend_replay",
-                "dimension_scope": "real",
+                "dimension_scope": "model_architecture_parameters_with_structured_surrogate_trace",
                 "source_cache": part.relative_to(PROJECT_ROOT).as_posix()})
+    expected_decode_rows = len(CROSS_MODEL_DECODE_MODELS) * len(MODES)
+    if len(decode_rows) != expected_decode_rows:
+        raise RuntimeError(
+            f"decode assembly produced {len(decode_rows)} rows, expected {expected_decode_rows}"
+        )
     _write_json(decode_path, {
+        "schema_version": 1,
         "figure_id": "fig18_cross_model_decode_cycles",
         "description": "Cross-model dense decode backend replay cycles",
         "phase": "decode",
@@ -282,10 +346,7 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
         spec = get_model_spec(model)
         for mode in MODES:
             part = _cross_model_part_path(output_dir, model, "prefill", mode)
-            if not part.exists():
-                print(f"  WARNING: missing prefill part {part}")
-                continue
-            data = json.loads(part.read_text(encoding="utf-8"))
+            data = _load_required_part(part, description="prefill part")
             prefill_rows.append({
                 "model_name": spec.name,
                 "model_family": _infer_model_family(spec.name),
@@ -300,7 +361,7 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
                 "replay_layers": int(spec.num_layers),
                 "replay_status": "PASS" if data.get("replay_ok") else "FAIL",
                 "data_source": "backend_replay",
-                "dimension_scope": "real",
+                "dimension_scope": "model_architecture_parameters_with_structured_surrogate_trace",
                 **{k: formula[k] for k in (
                     "hidden_size", "ffn_hidden_size", "ffn_variant", "activation",
                     "num_heads", "num_kv_heads", "head_dim", "datatype", "citation",
@@ -314,6 +375,11 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
                 "trace_name": f"{model}_prefill_P{P}_{mode}",
                 "command_counts": data.get("opcode_counts", {}),
                 "pim_mac_density": 0.0})
+    expected_prefill_rows = len(CROSS_MODEL_PREFILL_MODELS) * len(MODES)
+    if len(prefill_rows) != expected_prefill_rows:
+        raise RuntimeError(
+            f"prefill assembly produced {len(prefill_rows)} rows, expected {expected_prefill_rows}"
+        )
     _write_json(prefill_path, {
         "schema_version": 1,
         "figure_id": "fig22_cross_model_prefill_cycles",
@@ -408,16 +474,12 @@ def _run_pim_sharing_task(task: dict) -> dict:
         pim_cfg_override=task["pim_cfg_override"],
         max_inflight_requests=task.get("max_inflight_requests", 16),
         mac_mode=task.get("mac_mode", "per_kind"))
-    _write_part(result, task["part_path"])
+    _write_part(result, task)
     return result
 
 
 def collect_pim_sharing(output_dir: Path, *, force: bool = False, workers: int = 1) -> None:
     path = output_dir / PIM_SHARING_JSON
-    if not force and path.exists():
-        print(f"[pim-sharing] using existing data: {path}")
-        print(f"[pim-sharing] part cache: {output_dir / PIM_SHARING_PARTS_DIRNAME}")
-        return
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / PIM_SHARING_PARTS_DIRNAME).mkdir(parents=True, exist_ok=True)
 
@@ -425,13 +487,13 @@ def collect_pim_sharing(output_dir: Path, *, force: bool = False, workers: int =
     for wl in PIM_SHARING_WORKLOADS:
         for label, cfg in PIM_CONFIGS.items():
             part = _pim_sharing_part_path(output_dir, wl["model_key"], label)
-            if not force and part.exists():
-                continue
-            tasks.append({
+            task = {
                 "model_key": wl["model_key"], "phase": wl["phase"],
                 "past_len": wl["past_len"], "materialize_weights": False,
                 "pim_cfg_override": cfg, "part_path": str(part), "pim_label": label,
-                "max_inflight_requests": 16, "mac_mode": "per_kind"})
+                "max_inflight_requests": 16, "mac_mode": "per_kind"}
+            if force or not _part_cache_matches(part, task):
+                tasks.append(task)
 
     total = len(tasks)
     expected = len(PIM_SHARING_WORKLOADS) * len(PIM_CONFIGS)
@@ -472,12 +534,8 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
 
         k1_part = _pim_sharing_part_path(output_dir, model_key, "k1")
         k2_part = _pim_sharing_part_path(output_dir, model_key, "k2")
-        if not k1_part.exists():
-            print(f"  WARNING: missing k1 part {k1_part}"); continue
-        if not k2_part.exists():
-            print(f"  WARNING: missing k2 part {k2_part}"); continue
-        k1 = json.loads(k1_part.read_text(encoding="utf-8"))
-        k2 = json.loads(k2_part.read_text(encoding="utf-8"))
+        k1 = _load_required_part(k1_part, description="pim-sharing k1 part")
+        k2 = _load_required_part(k2_part, description="pim-sharing k2 part")
 
         cycles_k1, cycles_k2 = int(k1["cycles"]), int(k2["cycles"])
         slowdown = (cycles_k2 / cycles_k1) if cycles_k1 > 0 else 0.0
@@ -511,6 +569,11 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
             "pim_banks_per_mpu_k2": int(k2.get("pim_banks_per_mpu", 2) or 2),
             "replay_ok_k1": bool(k1.get("replay_ok")), "replay_ok_k2": bool(k2.get("replay_ok"))})
 
+    expected_rows = len(PIM_SHARING_WORKLOADS)
+    if len(rows) != expected_rows:
+        raise RuntimeError(
+            f"pim-sharing assembly produced {len(rows)} rows, expected {expected_rows}"
+        )
     _write_json(path, {
         "schema_version": 1,
         "description": "Transformer-trace PIM comparison: CD-PIM dedicated per-bank (k=1) vs shared-MPU 2-banks/MPU (k=2)",

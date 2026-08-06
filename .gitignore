@@ -20,6 +20,10 @@ compile_commands.json
 results/
 *.out
 
+# Checked-in lightweight regression fixtures
+!tests/
+!tests/test_artifact_generation.py
+
 # Tool/editor state
 .ipynb_checkpoints/
 .vscode/

@@ -64,7 +64,9 @@ The output directory contains:
 - rendered cross-model figures under `figures/`.
 
 Generated JSON records repository-relative cache paths, not developer-machine
-absolute paths. Reported cycles are simulator diagnostics under the modeled
+absolute paths. Collection fails closed if any worker fails, any expected part
+is absent, or any replay reports failure; partial results are not silently
+assembled. Reported cycles are simulator diagnostics under the modeled
 LPDDR5-PIM timing/resource contract; they are not silicon-calibrated runtime
 measurements. See the
 [LPDDR5-PIM execution semantics](../ramulator2/README.md#lpddr5-pim-execution-semantics)
@@ -76,4 +78,7 @@ occupancy, and shared-MPU serialization.
 The full sweep expands large transformer workload descriptions and can take
 substantial CPU time, memory, disk space, and temporary storage. Use a small
 positive `--workers` value when memory is constrained. Interrupted runs are
-restartable because completed part files are reused.
+restartable because completed part files are reused. Each part records a cache
+fingerprint over the task configuration plus parent and Ramulator source state;
+a stale or legacy part is regenerated automatically. Use `--force` when you
+want to bypass every valid cache entry deliberately.

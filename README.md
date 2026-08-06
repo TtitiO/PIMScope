@@ -134,7 +134,9 @@ The direct form remains supported:
 
 Generated data and figures are written under `results/`, which is intentionally
 ignored as local/generated state. Artifact JSON uses repository-relative cache
-paths rather than machine-specific absolute paths.
+paths rather than machine-specific absolute paths. Collection fails rather than
+assembling a partial artifact if a worker fails, a required part is missing, or
+a backend replay does not pass.
 
 ## Docker
 
@@ -146,6 +148,22 @@ cd ramulator2
 docker compose up -d --build --wait
 docker compose exec ramulator2 bash
 ```
+
+## Configure workloads and LPDDR5-PIM
+
+The simulator and workload generator are currently configurable through Python.
+For LPDDR5-PIM hardware parameters, construct
+`ramulator.dram.LPDDR5PIM(...)`; for supported transformer architecture
+parameters, use the generators under
+`ramulator.workload_surrogate.generate_full_transformer`. The exact resource
+and timing parameters are documented in the Ramulator fork guide.
+
+The paper reproduction command intentionally uses the fixed, versioned paper
+configuration. A validated YAML/JSON manifest and higher-level CLI for custom
+hardware and workloads are the next release milestone; the planned schema is
+outlined in [`configs/README.md`](configs/README.md). Until that interface is
+implemented, custom studies should use the typed Python component API rather
+than editing generated C++ files.
 
 ## Modeling scope
 
