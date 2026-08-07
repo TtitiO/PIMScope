@@ -174,9 +174,10 @@ policy, address/channel mappers, decode/prefill lengths, materialization,
 concurrency, lowering mode, built-in model keys, and custom dense model
 dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
 first interface is deliberately bounded to the validated one-controller/channel
-LPDDR5-PIM topology; arbitrary hierarchy/address mapping remains an explicit
-open issue. See [`configs/README.md`](configs/README.md) for the complete schema
-and current scope.
+LPDDR5-PIM topology. Within that scope, host-byte mapping is derived from the
+resolved hierarchy and capacity; multi-controller/channel mapping remains an
+explicit open issue. See [`configs/README.md`](configs/README.md) for the
+complete schema and current scope.
 
 The paper reproduction command intentionally remains fixed to the versioned
 paper configuration. The lower-level typed Python component API remains

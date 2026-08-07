@@ -80,7 +80,9 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 
 - `dram_class`: currently `LPDDR5PIM` only.
 - Organization/timing names are resolved by the checked-out Ramulator fork;
-  invalid names fail during backend validation.
+  invalid names fail during backend validation. Supported host-byte mapping
+  derives all hierarchy bounds from the resolved organization and rejects
+  one-past-capacity and invalid repeated ranges.
 - PIM datatypes: `int8`, `fp16`, `int16`, and `bf16`. The workload lowering
   currently advertises `int8`, `fp16`, and `bf16`; the manifest requires the
   workload and hardware datatypes to agree.
@@ -93,9 +95,11 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
   `MOP4CLXOR`, or `RITAddrMapper`.
 - Channel mapper: `CacheLineInterleave` or `PassThroughChannelMapper`.
 - Lowering modes: `per_kind`, `per_bank`, or `all_bank`.
-- Weight residency: `resident` or synthetic `full_preload`. `full_preload` is
-  retained for paper-style diagnostics, but its addresses are synthetic and it
-  is not yet a checkpoint placement or arbitrary-capacity mapping model.
+- Weight residency: `resident` or synthetic `full_preload`. Generated host
+  traffic uses the explicit `bounded_surrogate_v1` placement policy: historical
+  surrogate address tokens are deterministically placed within the resolved
+  device capacity before canonical byte-address mapping. `full_preload` remains
+  a paper-style diagnostic, not checkpoint placement or a capacity claim.
 - Phases: `decode` and `prefill`; Mixtral currently supports decode only.
 - Built-in models use the registry in the Ramulator workload-surrogate module.
   A custom dense model can instead be an object with `name`, `num_layers`,
@@ -110,11 +114,13 @@ PIM resources are validated both by the manifest layer and by
 
 The initial CLI instantiates one controller/channel, matching the validated
 paper topology. Semantic PIM bank sequences are retargeted to the selected
-organization's resolved bank-unit count. Selecting a mapper component does not
-yet imply validated multi-channel/rank support. The legacy host-byte
-decomposition also remains LPDDR5-organization-specific, so arbitrary
-organization/topology address mapping is still tracked as an open release
-issue rather than silently claimed.
+organization's resolved bank-unit count. The concrete host-byte mapper is now
+mixed-radix and derived from the resolved hierarchy, including physical and
+address-level sizes, transaction bytes, and capacity. Selecting a mapper
+component does not imply validated multi-channel support; multi-controller and
+channel-mapper semantics remain tracked separately. Literal user/trace byte
+addresses fail closed when they exceed capacity; generated workload-surrogate
+traffic uses `bounded_surrogate_v1` and records that policy explicitly.
 
 ## Interpretation boundary
 

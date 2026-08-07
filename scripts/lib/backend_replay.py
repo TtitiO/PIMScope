@@ -15,6 +15,7 @@ from pathlib import Path
 _ONE_TRILLION = "1000000000000"
 os.environ.setdefault("RAMULATOR_MAX_EXPANDED_RECORDS", _ONE_TRILLION)
 
+from .addressing import concrete_address_layout
 from .config import ResolvedExperiment
 from .runner import _extract_dram_layout
 
@@ -110,6 +111,7 @@ def _make_frontend(trace_path: Path, dram, *, clock_ratio: int = 4,
         "hab_command_id": command_ids["HAB"],
         "hab_pim_command_id": command_ids["HAB_PIM"],
         "addr_vec_size": layout["addr_vec_size"],
+        **concrete_address_layout(layout),
         "max_repeat": 100_000_000,
         "max_records": 10_000_000,
         "max_inflight_requests": max_inflight_requests,
@@ -179,10 +181,11 @@ def replay_concrete_trace(
     cfg = backend_cfg or LPDDR5_PIM_CONFIG
     dram = create_dram(cfg, dram_kwargs_overrides=pim_cfg_override)
     tck_ns = time_unit_ns(cfg)
+    layout = _extract_dram_layout(dram)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         trace_path = Path(tmpdir) / "trace.jsonl"
-        write_jsonl(concrete_records, trace_path)
+        write_jsonl(concrete_records, trace_path, address_layout=layout)
         frontend = _make_frontend(
             trace_path, dram,
             clock_ratio=int(cfg["frontend_clock_ratio"]),
@@ -208,6 +211,8 @@ def replay_concrete_trace(
     return {
         "cycles": cycles,
         "runtime_ns": cycles * tck_ns,
+        "address_mapping_version": layout["mapping_version"],
+        "addressable_capacity_bytes": layout["capacity_bytes"],
         "command_counts": opcode_counts,
         "pim_mac_issued": pim_mac,
         "pim_mac_ab_issued": pim_mac_ab,
@@ -262,21 +267,23 @@ def generate_and_replay(
         raise ValueError(f"Unknown phase: {phase}")
 
     # Bank interleaving is only applied when concurrent inflight is enabled.
-    # We must pass the device's real multi-level bank decomposition so flat
-    # bank indices map correctly into the addr_vec.
+    # Every lowering path receives the device-derived hierarchy so host and PIM
+    # addresses are validated against the same organization.
     interleave_banks = max_inflight_requests > 1
+    layout = _extract_dram_layout(create_dram(dram_kwargs_overrides=pim_cfg_override))
     lower_kwargs: dict = {
         "materialize_weights": materialize_weights,
         "interleave_banks": interleave_banks,
         "mac_mode": mac_mode,
+        "address_layout": layout,
+        "synthetic_address_policy": "bounded_surrogate_v1",
+        "addr_vec_size": layout["addr_vec_size"],
+        "bank_positions": layout["bank_positions"],
+        "bank_counts": layout["bank_counts"],
+        "row_level": layout["row_pos"],
+        "col_level": layout["col_pos"],
     }
     if interleave_banks:
-        layout = _extract_dram_layout(create_dram(dram_kwargs_overrides=pim_cfg_override))
-        lower_kwargs["addr_vec_size"] = layout["addr_vec_size"]
-        lower_kwargs["bank_positions"] = layout["bank_positions"]
-        lower_kwargs["bank_counts"] = layout["bank_counts"]
-        lower_kwargs["row_level"] = layout["row_pos"]
-        lower_kwargs["col_level"] = layout["col_pos"]
         lower_kwargs["interleave_depth"] = interleave_depth
     concrete = lower_semantic_records_to_concrete(semantic, **lower_kwargs)
     opcode_counts = count_concrete_opcodes(concrete)
@@ -302,6 +309,7 @@ def generate_and_replay(
         "past_len": past_len if phase == "decode" else None,
         "prompt_len": prompt_len if phase == "prefill" else None,
         "opcode_counts": opcode_counts,
+        "host_address_policy": "bounded_surrogate_v1",
         **result,
     }
 

@@ -8,6 +8,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
+from .addressing import extract_dram_layout
+
 
 DEFAULT_CFG = {
     "org_preset": "LPDDR5_8Gb_x16",
@@ -37,45 +39,8 @@ def _merge_cfg(base: dict, override: dict | None) -> dict:
 
 
 def _extract_dram_layout(dram) -> dict:
-    """Extract the device's multi-level bank decomposition."""
-    cls = type(dram)
-    level_names = list(cls.levels.keys())
-    org_dict, _ = dram.resolve()
-    org_counts = [org_dict.get(name.lower(), 1) for name in level_names]
-    row_idx = level_names.index("Row")
-    col_idx = level_names.index("Column")
-    bank_positions = list(range(1, row_idx))
-    bank_counts = [org_counts[i] for i in bank_positions]
-
-    if "BankGroup" in level_names:
-        bg_idx = level_names.index("BankGroup") - 1
-        if bg_idx < len(bank_positions) - 1:
-            bank_positions.append(bank_positions.pop(bg_idx))
-            bank_counts.append(bank_counts.pop(bg_idx))
-
-    if "PseudoChannel" in level_names:
-        pc_pos = level_names.index("PseudoChannel")
-        pc_idx = [i for i, pos in enumerate(bank_positions) if pos == pc_pos][0]
-        bank_positions.append(bank_positions.pop(pc_idx))
-        bank_counts.append(bank_counts.pop(pc_idx))
-
-    total_bank_units = 1
-    for count in bank_counts:
-        total_bank_units *= count
-    internal_prefetch_size = int(cls.internal_prefetch_size)
-    num_cols = int(org_counts[col_idx])
-    return {
-        "addr_vec_size": len(level_names),
-        "bank_positions": bank_positions,
-        "bank_counts": bank_counts,
-        "total_bank_units": total_bank_units,
-        "row_pos": row_idx,
-        "col_pos": col_idx,
-        "num_rows": int(org_counts[row_idx]),
-        "num_cols": num_cols,
-        "internal_prefetch_size": internal_prefetch_size,
-        "num_cls": num_cols // internal_prefetch_size,
-    }
+    """Compatibility wrapper for the canonical hierarchy-aware layout."""
+    return extract_dram_layout(dram)
 
 
 def _make_dram(ramulator, cfg: dict):

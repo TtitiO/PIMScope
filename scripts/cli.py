@@ -41,13 +41,24 @@ def _load_resolved(path: Path, overrides: list[str]):
 
 def _validate_backend(resolved) -> dict[str, Any]:
     from scripts.lib.backend_replay import create_dram, hardware_config_from_manifest
+    from scripts.lib.runner import _extract_dram_layout
 
     cfg = hardware_config_from_manifest(resolved)
     dram = create_dram(cfg)
     org, timing = dram.resolve()
+    layout = _extract_dram_layout(dram)
     return {
         "organization": org,
         "timing": timing,
+        "address_layout": {
+            "mapping_version": layout["mapping_version"],
+            "level_names": layout["level_names"],
+            "level_sizes": layout["level_sizes"],
+            "address_level_sizes": layout["address_level_sizes"],
+            "internal_prefetch_size": layout["internal_prefetch_size"],
+            "tx_bytes": layout["tx_bytes"],
+            "capacity_bytes": layout["capacity_bytes"],
+        },
         "dram_config": dram.to_config(),
     }
 
@@ -170,16 +181,18 @@ def run_experiment(resolved) -> dict[str, Any]:
         "materialize_weights": workload["weight_residency"] == "full_preload",
         "interleave_banks": interleave_banks,
         "mac_mode": workload["mac_mode"],
+        "address_layout": layout,
+        "synthetic_address_policy": "bounded_surrogate_v1",
     }
+    lower_kwargs.update({
+        "addr_vec_size": layout["addr_vec_size"],
+        "bank_positions": layout["bank_positions"],
+        "bank_counts": layout["bank_counts"],
+        "row_level": layout["row_pos"],
+        "col_level": layout["col_pos"],
+    })
     if interleave_banks:
-        lower_kwargs.update({
-            "addr_vec_size": layout["addr_vec_size"],
-            "bank_positions": layout["bank_positions"],
-            "bank_counts": layout["bank_counts"],
-            "row_level": layout["row_pos"],
-            "col_level": layout["col_pos"],
-            "interleave_depth": workload["interleave_depth"],
-        })
+        lower_kwargs["interleave_depth"] = workload["interleave_depth"]
     concrete = lower_semantic_records_to_concrete(semantic, **lower_kwargs)
 
     effective_inflight = workload["max_inflight_requests"]
@@ -208,6 +221,15 @@ def run_experiment(resolved) -> dict[str, Any]:
         "resolved_hardware": {
             "organization": organization,
             "timing": timing,
+            "address_layout": {
+                "mapping_version": layout["mapping_version"],
+                "level_names": layout["level_names"],
+                "level_sizes": layout["level_sizes"],
+                "address_level_sizes": layout["address_level_sizes"],
+                "internal_prefetch_size": layout["internal_prefetch_size"],
+                "tx_bytes": layout["tx_bytes"],
+                "capacity_bytes": layout["capacity_bytes"],
+            },
             "effective_max_inflight_requests": effective_inflight,
         },
         "workload_summary": {
@@ -216,6 +238,7 @@ def run_experiment(resolved) -> dict[str, Any]:
             "semantic_records": len(semantic),
             "concrete_records": len(concrete),
             "concrete_opcode_counts": count_concrete_opcodes(concrete),
+            "host_address_policy": "bounded_surrogate_v1",
             "surrogate_scope": {
                 "architecture_dimensions": "published_or_user_supplied",
                 "runtime_trace": False,
