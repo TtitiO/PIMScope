@@ -109,10 +109,12 @@ PIM resources are validated both by the manifest layer and by
 `LPDDR5PIM.resolve()` before large trace generation begins.
 
 The initial CLI instantiates one controller/channel, matching the validated
-paper topology. Selecting a mapper component does not yet imply validated
-multi-channel/rank support. The legacy host-byte decomposition also remains
-LPDDR5-organization-specific, so arbitrary organization/topology address
-mapping is still tracked as an open release issue rather than silently claimed.
+paper topology. Semantic PIM bank sequences are retargeted to the selected
+organization's resolved bank-unit count. Selecting a mapper component does not
+yet imply validated multi-channel/rank support. The legacy host-byte
+decomposition also remains LPDDR5-organization-specific, so arbitrary
+organization/topology address mapping is still tracked as an open release
+issue rather than silently claimed.
 
 ## Interpretation boundary
 

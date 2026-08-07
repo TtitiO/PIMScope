@@ -84,6 +84,18 @@ def _custom_model_spec(model: dict[str, Any], datatype: str):
     )
 
 
+def _retarget_semantic_banks(records: list[dict], total_bank_units: int) -> None:
+    if total_bank_units <= 0:
+        raise ValueError("resolved hardware must expose at least one bank unit")
+    for record in records:
+        bank_sequence = record.get("bank_sequence")
+        if bank_sequence:
+            record["bank_sequence"] = list(range(total_bank_units))
+        mapping = record.get("mapping_policy")
+        if isinstance(mapping, dict) and "bank_sequence_policy" in mapping:
+            mapping["bank_sequence_policy"] = "resolved_hardware_round_robin"
+
+
 def _generate_semantic(workload: dict[str, Any]) -> tuple[list[dict], str]:
     from ramulator.workload_surrogate.generate_full_transformer import (
         generate_dense_decoder_records_for_model,
@@ -150,6 +162,8 @@ def run_experiment(resolved) -> dict[str, Any]:
     # combinations fail early with the simulator's field-specific error.
     organization, timing = dram.resolve()
     semantic, model_name = _generate_semantic(workload)
+    layout = _extract_dram_layout(dram)
+    _retarget_semantic_banks(semantic, layout["total_bank_units"])
 
     interleave_banks = workload["max_inflight_requests"] > 1
     lower_kwargs: dict[str, Any] = {
@@ -158,7 +172,6 @@ def run_experiment(resolved) -> dict[str, Any]:
         "mac_mode": workload["mac_mode"],
     }
     if interleave_banks:
-        layout = _extract_dram_layout(dram)
         lower_kwargs.update({
             "addr_vec_size": layout["addr_vec_size"],
             "bank_positions": layout["bank_positions"],

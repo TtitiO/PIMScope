@@ -1,8 +1,18 @@
 import json
 from pathlib import Path
 
-from scripts.cli import run_experiment
+from scripts.cli import _retarget_semantic_banks, run_experiment
 from scripts.lib.config import resolve_experiment_manifest
+
+
+def test_semantic_bank_sequences_follow_resolved_hardware():
+    records = [
+        {"bank_sequence": [0, 1, 2, 3], "mapping_policy": {"bank_sequence_policy": "manifest_order"}},
+        {"kind": "Barrier"},
+    ]
+    _retarget_semantic_banks(records, 8)
+    assert records[0]["bank_sequence"] == list(range(8))
+    assert records[0]["mapping_policy"]["bank_sequence_policy"] == "resolved_hardware_round_robin"
 
 
 def test_tiny_custom_model_replays_with_resolved_manifest():
