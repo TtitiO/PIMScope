@@ -57,6 +57,10 @@ jobs:
           (cd ramulator2 && ../.venv/bin/python examples/example_config.py)
           (cd ramulator2 && ../.venv/bin/python examples/lpddr5_pim_example_config.py)
           .venv/bin/pimscope-artifacts --help
+          .venv/bin/pimscope --help
+          .venv/bin/pimscope validate configs/example_custom.json
+          .venv/bin/pimscope run configs/example_custom_model.json \
+            --output /tmp/pimscope-custom-model.json
           .venv/bin/python scripts/gen_figures.py --help
           .venv/bin/python -m pytest -q tests
 

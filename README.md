@@ -151,19 +151,37 @@ docker compose exec ramulator2 bash
 
 ## Configure workloads and LPDDR5-PIM
 
-The simulator and workload generator are currently configurable through Python.
-For LPDDR5-PIM hardware parameters, construct
-`ramulator.dram.LPDDR5PIM(...)`; for supported transformer architecture
-parameters, use the generators under
-`ramulator.workload_surrogate.generate_full_transformer`. The exact resource
-and timing parameters are documented in the Ramulator fork guide.
+Custom studies use a versioned, validated JSON/YAML manifest and the installed
+`pimscope` CLI. Start with [`configs/example_custom.json`](configs/example_custom.json):
 
-The paper reproduction command intentionally uses the fixed, versioned paper
-configuration. A validated YAML/JSON manifest and higher-level CLI for custom
-hardware and workloads are the next release milestone; the planned schema is
-outlined in [`configs/README.md`](configs/README.md). Until that interface is
-implemented, custom studies should use the typed Python component API rather
-than editing generated C++ files.
+```bash
+.venv/bin/pimscope validate configs/example_custom.json
+.venv/bin/pimscope run configs/example_custom.json
+```
+
+Small parameter sweeps can use command-line overrides without editing source:
+
+```bash
+.venv/bin/pimscope run configs/example_custom.json \
+  --set hardware.pim.pim_banks_per_mpu=1 \
+  --set workload.past_len=64 \
+  --output results/custom/per-bank.json
+```
+
+The interface exposes organization/timing presets and overrides, PIM datatype
+and resources, MPU sharing, timing and energy terms, scheduler, refresh, row
+policy, address/channel mappers, decode/prefill lengths, materialization,
+concurrency, lowering mode, built-in model keys, and custom dense model
+dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
+first interface is deliberately bounded to the validated one-controller/channel
+LPDDR5-PIM topology; arbitrary hierarchy/address mapping remains an explicit
+open issue. See [`configs/README.md`](configs/README.md) for the complete schema
+and current scope.
+
+The paper reproduction command intentionally remains fixed to the versioned
+paper configuration. The lower-level typed Python component API remains
+available for simulator developers, but architecture researchers should not
+need to edit generated C++ or the artifact scripts for ordinary sweeps.
 
 ## Modeling scope
 

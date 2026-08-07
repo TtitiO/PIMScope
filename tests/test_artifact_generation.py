@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.gen_figures import _load_required_part, _part_cache_matches, _run_tasks, _write_part
+from scripts.gen_figures import (
+    _load_required_part,
+    _part_cache_matches,
+    _run_tasks,
+    _write_part,
+)
 from scripts.lib.backend_replay import count_concrete_opcodes
 
 

@@ -15,8 +15,8 @@ from pathlib import Path
 _ONE_TRILLION = "1000000000000"
 os.environ.setdefault("RAMULATOR_MAX_EXPANDED_RECORDS", _ONE_TRILLION)
 
+from .config import ResolvedExperiment
 from .runner import _extract_dram_layout
-
 
 LPDDR5_PIM_CONFIG = {
     "dram_class": "LPDDR5PIM",
@@ -53,6 +53,32 @@ def create_dram(cfg: dict | None = None, *, dram_kwargs_overrides: dict | None =
     )
 
 
+def hardware_config_from_manifest(resolved: ResolvedExperiment) -> dict:
+    """Translate a validated public manifest into the backend config shape."""
+    hardware = resolved.manifest["hardware"]
+    pim = dict(hardware["pim"])
+    pim.update(hardware.get("timing_overrides", {}))
+    pim.update(hardware.get("org_overrides", {}))
+    return {
+        "dram_class": hardware["dram_class"],
+        "org_preset": hardware["org_preset"],
+        "timing_preset": hardware["timing_preset"],
+        "dram_kwargs": pim,
+        "frontend_clock_ratio": hardware["frontend_clock_ratio"],
+        "controller": dict(hardware["controller"]),
+        "memory_system": dict(hardware["memory_system"]),
+        "manifest_fingerprint": resolved.fingerprint,
+    }
+
+
+def _component(namespace, name: str, **kwargs):
+    try:
+        cls = getattr(namespace, name)
+    except AttributeError as exc:
+        raise ValueError(f"Ramulator component {name!r} is not available") from exc
+    return cls(**kwargs)
+
+
 def _make_frontend(trace_path: Path, dram, *, clock_ratio: int = 4,
                    max_trace_bytes: int | None = None,
                    max_expanded_records: int | None = None,
@@ -63,20 +89,20 @@ def _make_frontend(trace_path: Path, dram, *, clock_ratio: int = 4,
         name: idx for idx, name in enumerate(type(dram).supported_requests.keys())}
     command_ids = {name: idx for idx, name in enumerate(type(dram).commands)}
     layout = _extract_dram_layout(dram)
-    kwargs = dict(
-        clock_ratio=clock_ratio,
-        path=str(trace_path),
-        pim_compute_request_type_id=request_type_ids["PIMCompute"],
-        pim_load_all_request_type_id=request_type_ids["PIMLoadAll"],
-        pim_compute_all_request_type_id=request_type_ids["PIMComputeAll"],
-        sb_command_id=command_ids["SB"],
-        hab_command_id=command_ids["HAB"],
-        hab_pim_command_id=command_ids["HAB_PIM"],
-        addr_vec_size=layout["addr_vec_size"],
-        max_repeat=100_000_000,
-        max_records=10_000_000,
-        max_inflight_requests=max_inflight_requests,
-    )
+    kwargs = {
+        "clock_ratio": clock_ratio,
+        "path": str(trace_path),
+        "pim_compute_request_type_id": request_type_ids["PIMCompute"],
+        "pim_load_all_request_type_id": request_type_ids["PIMLoadAll"],
+        "pim_compute_all_request_type_id": request_type_ids["PIMComputeAll"],
+        "sb_command_id": command_ids["SB"],
+        "hab_command_id": command_ids["HAB"],
+        "hab_pim_command_id": command_ids["HAB_PIM"],
+        "addr_vec_size": layout["addr_vec_size"],
+        "max_repeat": 100_000_000,
+        "max_records": 10_000_000,
+        "max_inflight_requests": max_inflight_requests,
+    }
     if max_trace_bytes is not None:
         kwargs["max_trace_bytes"] = max_trace_bytes
     if max_expanded_records is not None:
@@ -84,20 +110,32 @@ def _make_frontend(trace_path: Path, dram, *, clock_ratio: int = 4,
     return ramulator.frontend.LPDDR5PIMConcreteTrace(**kwargs)
 
 
-def _make_mem(dram):
+def _make_mem(dram, cfg: dict | None = None):
     import ramulator
 
+    cfg = cfg or LPDDR5_PIM_CONFIG
+    controller_cfg = cfg.get("controller", {})
+    memory_cfg = cfg.get("memory_system", {})
     ctrl = ramulator.controller.LPDDR5PIM(
         dram=dram,
-        scheduler=ramulator.scheduler.FRFCFS(),
-        refresh_manager=ramulator.refresh_manager.NoRefresh(),
-        row_policy=ramulator.row_policy.Open(),
-        addr_mapper=ramulator.addr_mapper.PassThroughAddrMapper(),
+        scheduler=_component(
+            ramulator.scheduler, controller_cfg.get("scheduler", "FRFCFS")
+        ),
+        refresh_manager=_component(
+            ramulator.refresh_manager, controller_cfg.get("refresh_manager", "NoRefresh")
+        ),
+        row_policy=_component(
+            ramulator.row_policy, controller_cfg.get("row_policy", "Open")
+        ),
+        addr_mapper=_component(
+            ramulator.addr_mapper, controller_cfg.get("addr_mapper", "PassThroughAddrMapper")
+        ),
     )
+    channel_mapper_name = memory_cfg.get("channel_mapper", "CacheLineInterleave")
     return ramulator.memory_system.GenericDRAM(
-        clock_ratio=1,
+        clock_ratio=int(memory_cfg.get("clock_ratio", 1)),
         controllers=[ctrl],
-        channel_mapper=ramulator.channel_mapper.CacheLineInterleave(),
+        channel_mapper=_component(ramulator.channel_mapper, channel_mapper_name),
     )
 
 
@@ -122,24 +160,26 @@ def replay_concrete_trace(
     max_expanded_records: int = 100_000_000_000,
     pim_cfg_override: dict | None = None,
     max_inflight_requests: int = 1,
+    backend_cfg: dict | None = None,
 ) -> dict:
     import ramulator
     from ramulator.workload_surrogate.lpddr5_pim_concrete_trace import write_jsonl
 
-    dram = create_dram(dram_kwargs_overrides=pim_cfg_override)
-    tck_ns = time_unit_ns()
+    cfg = backend_cfg or LPDDR5_PIM_CONFIG
+    dram = create_dram(cfg, dram_kwargs_overrides=pim_cfg_override)
+    tck_ns = time_unit_ns(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         trace_path = Path(tmpdir) / "trace.jsonl"
         write_jsonl(concrete_records, trace_path)
         frontend = _make_frontend(
             trace_path, dram,
-            clock_ratio=LPDDR5_PIM_CONFIG["frontend_clock_ratio"],
+            clock_ratio=int(cfg["frontend_clock_ratio"]),
             max_trace_bytes=max_trace_bytes,
             max_expanded_records=max_expanded_records,
             max_inflight_requests=max_inflight_requests,
         )
-        mem = _make_mem(dram)
+        mem = _make_mem(dram, cfg)
         sim = ramulator.Simulation(frontend, mem)
         sim.run()
         sim.finalize()
@@ -301,7 +341,10 @@ def _infer_model_family(name: str) -> str:
 def prefill_formula(model_key: str, *, prompt_len: int) -> dict:
     from ramulator.dram.lpddr5_pim import PIM_DATATYPE_RESOURCES
     from ramulator.workload_surrogate.generate_full_transformer import (
-        FFN_VARIANT_PROJECTION_COUNTS, get_dense_prefill_manifests, get_model_spec)
+        FFN_VARIANT_PROJECTION_COUNTS,
+        get_dense_prefill_manifests,
+        get_model_spec,
+    )
 
     spec = get_model_spec(model_key)
     attn_m, _ = get_dense_prefill_manifests(spec, prompt_len=prompt_len)

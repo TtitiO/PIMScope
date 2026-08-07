@@ -16,6 +16,31 @@ The installed `pimscope-artifacts` entry point and direct
 adds the checked-out simulator source and native extension paths itself, so no
 manual `PYTHONPATH` export is required.
 
+For custom researcher experiments, use the validated `pimscope` CLI rather than
+editing simulator source:
+
+```bash
+.venv/bin/pimscope validate configs/example_custom.json
+.venv/bin/pimscope run configs/example_custom.json
+```
+
+Use repeated `--set path=value` options for small sweeps without copying a
+manifest, for example:
+
+```bash
+.venv/bin/pimscope run configs/example_custom.json \
+  --set hardware.pim.pim_banks_per_mpu=1 \
+  --set workload.past_len=64 \
+  --output results/custom/per-bank.json
+```
+
+Manifests may be JSON or YAML. `validate` prints the resolved configuration and
+fails before trace generation for unknown fields, unsupported components,
+invalid topology/resource values, or mismatched workload/PIM datatypes. The
+current public runner supports LPDDR5PIM and the built-in dense model registry
+plus custom dense model dimension manifests; custom models remain structured
+surrogates, not runtime traces.
+
 ## Reproduce everything
 
 ```bash
@@ -31,7 +56,8 @@ Equivalent direct command:
 This collects simulation data and renders the generated figure. Results are
 written under `results/`. That directory is generated local state and is not
 tracked. Cached simulation parts are reused unless collection is run with
-`--force`.
+`--force`. The paper artifact command intentionally remains tied to the
+camera-ready configuration; use `pimscope run` for custom studies.
 
 ## Reproduce separately
 
