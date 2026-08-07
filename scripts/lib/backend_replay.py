@@ -76,7 +76,18 @@ def _component(namespace, name: str, **kwargs):
         cls = getattr(namespace, name)
     except AttributeError as exc:
         raise ValueError(f"Ramulator component {name!r} is not available") from exc
-    return cls(**kwargs)
+    try:
+        return cls(**kwargs)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Ramulator component {name!r} configuration is invalid: {exc}") from exc
+
+
+def _make_addr_mapper(ramulator, name: str):
+    if name == "RITAddrMapper":
+        return ramulator.addr_mapper.RITAddrMapper(
+            addr_mapper=ramulator.addr_mapper.PassThroughAddrMapper()
+        )
+    return _component(ramulator.addr_mapper, name)
 
 
 def _make_frontend(trace_path: Path, dram, *, clock_ratio: int = 4,
@@ -127,8 +138,8 @@ def _make_mem(dram, cfg: dict | None = None):
         row_policy=_component(
             ramulator.row_policy, controller_cfg.get("row_policy", "Open")
         ),
-        addr_mapper=_component(
-            ramulator.addr_mapper, controller_cfg.get("addr_mapper", "PassThroughAddrMapper")
+        addr_mapper=_make_addr_mapper(
+            ramulator, controller_cfg.get("addr_mapper", "PassThroughAddrMapper")
         ),
     )
     channel_mapper_name = memory_cfg.get("channel_mapper", "CacheLineInterleave")

@@ -62,6 +62,20 @@ def test_custom_dense_model_is_validated():
         resolve_experiment_manifest(raw)
 
 
+def test_backend_factory_supports_nested_rit_mapper():
+    from scripts.lib.backend_replay import _make_mem, create_dram
+
+    raw = _example_manifest()
+    raw["hardware"]["controller"]["addr_mapper"] = "RITAddrMapper"
+    resolved = resolve_experiment_manifest(raw)
+    backend = hardware_config_from_manifest(resolved)
+    memory = _make_mem(create_dram(backend), backend)
+    config = memory.to_config()
+    mapper = config["controllers"][0]["addr_mapper"]
+    assert mapper["impl"] == "RITAddrMapper"
+    assert mapper["addr_mapper"]["impl"] == "PassThroughAddrMapper"
+
+
 def test_cli_style_override_changes_resolved_hardware():
     raw = apply_overrides(
         _example_manifest(),
