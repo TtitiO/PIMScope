@@ -151,6 +151,13 @@ docker compose exec ramulator2 bash
 
 ## Configure workloads and LPDDR5-PIM
 
+The current public PIMScope backend is intentionally LPDDR5-PIM-specific.
+Ramulator also contains a generic LPDDR6 DRAM standard, but LPDDR6-PIM is not
+enabled by this interface yet. LPDDR6 support requires standard-specific PIM
+commands, controller scheduling, trace vocabulary, hierarchy/sub-channel
+mapping, refresh interaction, and power semantics; it is tracked as P1-27 in
+[`OPEN_SOURCE_READINESS_ISSUES.md`](OPEN_SOURCE_READINESS_ISSUES.md).
+
 Custom studies use a versioned, validated JSON/YAML manifest and the installed
 `pimscope` CLI. Start with [`configs/example_custom.json`](configs/example_custom.json):
 

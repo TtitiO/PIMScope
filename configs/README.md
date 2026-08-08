@@ -95,7 +95,11 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 
 ## Accepted values and current scope
 
-- `dram_class`: currently `LPDDR5PIM` only.
+- `dram_class`: currently `LPDDR5PIM` only. The maintained Ramulator fork also
+  exposes generic `LPDDR6`, but LPDDR6-PIM is planned work tracked in
+  `OPEN_SOURCE_READINESS_ISSUES.md` as P1-27 and is intentionally rejected by
+  the public runner until its command, timing, trace, hierarchy, refresh, and
+  power contracts are validated.
 - Organization/timing names are resolved by the checked-out Ramulator fork;
   invalid names fail during backend validation. Supported host-byte mapping
   derives all hierarchy bounds from the resolved organization and rejects

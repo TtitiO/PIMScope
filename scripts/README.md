@@ -45,7 +45,9 @@ fails before trace generation for unknown fields, unsupported components,
 invalid topology/resource values, or mismatched workload/PIM datatypes. The
 manifest explicitly records the topology and currently requires one controller
 and one channel; unsupported multi-controller/channel values fail before backend
-construction. The current public runner supports LPDDR5PIM and the built-in dense model registry
+construction. The current public runner supports LPDDR5PIM only. The maintained fork's
+  generic LPDDR6 standard is not an LPDDR6-PIM backend; LPDDR6-PIM adaptation
+  is tracked as P1-27 in `OPEN_SOURCE_READINESS_ISSUES.md`. The built-in dense model registry
 plus custom dense model dimension manifests; custom models remain structured
 surrogates, not runtime traces. `workload.seed` is validated and recorded in
 result provenance. Run `pimscope doctor --config <manifest>` to check the
