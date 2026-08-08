@@ -31,6 +31,7 @@
     "schedule_policy": "serialized",
     "weight_residency": "resident",
     "mac_mode": "per_kind",
+    "seed": 12345,
     "max_inflight_requests": 16,
     "interleave_depth": 4
   },

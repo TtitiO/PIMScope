@@ -81,6 +81,7 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
     "schedule_policy": "serialized",
     "weight_residency": "resident",
     "mac_mode": "per_kind",
+    "seed": 12345,
     "max_inflight_requests": 16,
     "interleave_depth": 4
   },
@@ -107,6 +108,9 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
   `MOP4CLXOR`, or `RITAddrMapper`.
 - Channel mapper: `CacheLineInterleave` or `PassThroughChannelMapper`.
 - Lowering modes: `per_kind`, `per_bank`, or `all_bank`.
+- `seed`: a non-negative integer recorded in result provenance. The current
+  structured workload generators are deterministic; the seed is reserved for
+  randomized frontends and future randomized lowering policies.
 - Weight residency: `resident` or synthetic `full_preload`. Generated host
   traffic uses the explicit `bounded_surrogate_v1` placement policy: historical
   surrogate address tokens are deterministically placed within the resolved

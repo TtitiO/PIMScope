@@ -36,6 +36,11 @@ def test_unknown_and_invalid_fields_fail_with_dotted_path():
     with pytest.raises(ValueError, match=r"workload\.max_inflight_requests"):
         resolve_experiment_manifest(raw)
 
+    raw = _example_manifest()
+    raw["workload"]["seed"] = -1
+    with pytest.raises(ValueError, match=r"workload\.seed"):
+        resolve_experiment_manifest(raw)
+
 
 def test_workload_and_hardware_datatypes_must_match():
     raw = _example_manifest()

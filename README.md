@@ -171,8 +171,8 @@ Small parameter sweeps can use command-line overrides without editing source:
 The interface exposes organization/timing presets and overrides, PIM datatype
 and resources, shared-block grouping, timing and energy terms, scheduler,
 refresh, row policy, address/channel mappers, decode/prefill lengths, materialization,
-concurrency, lowering mode, built-in model keys, and custom dense model
-dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
+concurrency, an explicit recorded seed, lowering mode, built-in model keys, and
+custom dense model dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
 first interface is deliberately bounded to the validated one-controller/channel
 LPDDR5-PIM topology. Within that scope, host-byte mapping is derived from the
 resolved hierarchy and capacity; multi-controller/channel mapping remains an

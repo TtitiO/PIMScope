@@ -45,7 +45,8 @@ fails before trace generation for unknown fields, unsupported components,
 invalid topology/resource values, or mismatched workload/PIM datatypes. The
 current public runner supports LPDDR5PIM and the built-in dense model registry
 plus custom dense model dimension manifests; custom models remain structured
-surrogates, not runtime traces. Saved results can be checked independently with
+surrogates, not runtime traces. `workload.seed` is validated and recorded in
+result provenance. Saved results can be checked independently with
 `pimscope validate-result`; concrete opcode JSONL files can be checked with
 `pimscope validate-trace --config <manifest> <trace.jsonl>`.
 
