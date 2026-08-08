@@ -180,9 +180,12 @@ explicit open issue. See [`configs/README.md`](configs/README.md) for the
 complete schema and current scope.
 
 The paper reproduction command intentionally remains fixed to the versioned
-paper configuration. The lower-level typed Python component API remains
-available for simulator developers, but architecture researchers should not
-need to edit generated C++ or the artifact scripts for ordinary sweeps.
+paper configuration. The reusable researcher-facing simulator API is
+`ramulator.pimscope`, and the Ramulator fork also installs the standalone
+`ramulator-pimscope` command. The parent `pimscope` command is a thin
+compatibility adapter over that API. The lower-level typed Python component API
+remains available for simulator developers, but architecture researchers should
+not need to edit generated C++ or the artifact scripts for ordinary sweeps.
 
 ## Modeling scope
 

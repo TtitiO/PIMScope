@@ -3,8 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.lib.backend_replay import hardware_config_from_manifest
-from scripts.lib.config import apply_overrides, resolve_experiment_manifest
+from ramulator.pimscope import (
+    apply_overrides,
+    create_dram,
+    create_memory_system,
+    hardware_config_from_manifest,
+    resolve_experiment_manifest,
+)
 
 EXAMPLE = Path(__file__).parents[1] / "configs" / "example_custom.json"
 
@@ -63,13 +68,11 @@ def test_custom_dense_model_is_validated():
 
 
 def test_backend_factory_supports_nested_rit_mapper():
-    from scripts.lib.backend_replay import _make_mem, create_dram
-
     raw = _example_manifest()
     raw["hardware"]["controller"]["addr_mapper"] = "RITAddrMapper"
     resolved = resolve_experiment_manifest(raw)
     backend = hardware_config_from_manifest(resolved)
-    memory = _make_mem(create_dram(backend), backend)
+    memory = create_memory_system(create_dram(backend), backend)
     config = memory.to_config()
     mapper = config["controllers"][0]["addr_mapper"]
     assert mapper["impl"] == "RITAddrMapper"

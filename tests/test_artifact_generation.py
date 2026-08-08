@@ -9,7 +9,7 @@ from scripts.gen_figures import (
     _run_tasks,
     _write_part,
 )
-from scripts.lib.backend_replay import count_concrete_opcodes
+from ramulator.pimscope import count_concrete_opcodes
 
 
 def test_run_tasks_fails_closed_when_a_worker_fails():

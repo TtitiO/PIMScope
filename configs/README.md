@@ -1,14 +1,25 @@
 # PIMScope configuration manifests
 
-PIMScope exposes a validated researcher-facing experiment manifest. JSON and
-YAML files use the same schema; JSON is used for the checked-in example so it
-works without a YAML parser during source inspection.
+PIMScope exposes a validated researcher-facing experiment manifest through the
+public `ramulator.pimscope` simulator API. The parent command is a thin adapter
+over that API. JSON and YAML files use the same schema; JSON is used for the
+checked-in example so it works without a YAML parser during source inspection.
 
 ## Quick start
+
+From the parent repository, use the compatibility command:
 
 ```bash
 .venv/bin/pimscope validate configs/example_custom.json
 .venv/bin/pimscope run configs/example_custom.json
+```
+
+The maintained Ramulator fork owns the same implementation and installs a
+standalone command for users of that repository alone:
+
+```bash
+.venv/bin/ramulator-pimscope validate configs/example_custom.json
+.venv/bin/ramulator-pimscope run configs/example_custom.json
 ```
 
 The example is intentionally small (`OPT-125M`, decode, `past_len: 32`) so it

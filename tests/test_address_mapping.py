@@ -3,14 +3,17 @@ from pathlib import Path
 
 import pytest
 
-from scripts.lib.addressing import (
+from ramulator.dram.addressing import (
     addr_vec_from_byte_address,
     extract_dram_layout,
     validate_addr_vec,
 )
-from scripts.cli import _validate_backend
-from scripts.lib.backend_replay import create_dram, hardware_config_from_manifest
-from scripts.lib.config import resolve_experiment_manifest
+from ramulator.pimscope import (
+    create_dram,
+    hardware_config_from_manifest,
+    resolve_experiment_manifest,
+    validate_backend,
+)
 
 
 def _layout(preset: str = "LPDDR5_8Gb_x16", **org_overrides):
@@ -176,7 +179,7 @@ def test_validate_backend_reports_resolved_address_layout():
             encoding="utf-8"
         )
     )
-    backend = _validate_backend(resolve_experiment_manifest(raw))
+    backend = validate_backend(resolve_experiment_manifest(raw))
     assert backend["address_layout"]["level_names"][-2:] == ["Row", "Column"]
     assert backend["address_layout"]["address_level_sizes"][-1] == 64
     assert backend["address_layout"]["tx_bytes"] == 32

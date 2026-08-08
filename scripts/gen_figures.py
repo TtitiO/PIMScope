@@ -187,7 +187,7 @@ def _cross_model_part_path(output_dir: Path, model: str, phase: str, mode: str) 
 
 
 def _run_cross_model_task(task: dict) -> dict:
-    from scripts.lib.backend_replay import generate_and_replay
+    from ramulator.pimscope import generate_and_replay
 
     result = generate_and_replay(
         task["phase"], task["model_key"],
@@ -202,7 +202,7 @@ def _run_cross_model_task(task: dict) -> dict:
 
 
 def collect_cross_model(output_dir: Path, *, force: bool = False, workers: int = 1) -> None:
-    from scripts.lib.backend_replay import pim_cfg_shared
+    from ramulator.pimscope import pim_cfg_shared
 
     decode_path = output_dir / DECODE_JSON
     prefill_path = output_dir / PREFILL_JSON
@@ -293,7 +293,7 @@ def _load_required_part(path: Path, *, description: str) -> dict:
 
 
 def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Path) -> None:
-    from scripts.lib.backend_replay import _infer_model_family
+    from ramulator.pimscope import infer_model_family
     from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
 
     decode_rows: list[dict] = []
@@ -305,7 +305,7 @@ def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Pat
             model_name = spec.name if spec else "Mixtral-8x7B"
             decode_rows.append({
                 "model_name": model_name,
-                "model_family": _infer_model_family(model_name),
+                "model_family": infer_model_family(model_name),
                 "mode": mode,
                 "cycles": int(data["cycles"]),
                 "runtime_ns": float(data["runtime_ns"]),
@@ -336,7 +336,7 @@ def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Pat
 
 
 def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
-    from scripts.lib.backend_replay import prefill_formula, _infer_model_family
+    from ramulator.pimscope import infer_model_family, prefill_formula
     from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
 
     P = CROSS_MODEL_PREFILL_PROMPT_LEN
@@ -349,7 +349,7 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
             data = _load_required_part(part, description="prefill part")
             prefill_rows.append({
                 "model_name": spec.name,
-                "model_family": _infer_model_family(spec.name),
+                "model_family": infer_model_family(spec.name),
                 "model_key": model,
                 "mode": mode,
                 "cycles": int(data["cycles"]),
@@ -464,7 +464,7 @@ def _pim_sharing_part_path(output_dir: Path, model: str, label: str) -> Path:
 
 
 def _run_pim_sharing_task(task: dict) -> dict:
-    from scripts.lib.backend_replay import generate_and_replay
+    from ramulator.pimscope import generate_and_replay
 
     result = generate_and_replay(
         task["phase"], task["model_key"],
@@ -515,7 +515,7 @@ def collect_pim_sharing(output_dir: Path, *, force: bool = False, workers: int =
 
 
 def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
-    from scripts.lib.backend_replay import _infer_model_family
+    from ramulator.pimscope import infer_model_family
     from ramulator.workload_surrogate.generate_full_transformer import get_model_spec
 
     rows: list[dict] = []
@@ -547,7 +547,7 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
 
         rows.append({
             "workload": label, "model_key": model_key,
-            "model_family": _infer_model_family(model_name),
+            "model_family": infer_model_family(model_name),
             "phase": wl["phase"], "hidden_size": hidden_size, "num_layers": num_layers,
             "cycles_k1": cycles_k1, "cycles_k2": cycles_k2,
             "runtime_ns_k1": float(k1["runtime_ns"]), "runtime_ns_k2": float(k2["runtime_ns"]),
