@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "experiment": "opt-125m-shared-mpu-example",
+  "experiment": "opt-125m-shared-block-example",
   "hardware": {
     "dram_class": "LPDDR5PIM",
     "org_preset": "LPDDR5_8Gb_x16",
     "timing_preset": "LPDDR5_6400",
     "pim": {
       "pim_datatype": "int8",
-      "pim_banks_per_mpu": 2,
-      "pim_mac_execution_model": "shared_mpu_serial"
+      "pim_banks_per_block": 2,
+      "pim_mac_execution_model": "shared_block_serial"
     },
     "controller": {
       "scheduler": "FRFCFS",

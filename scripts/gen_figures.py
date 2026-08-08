@@ -38,6 +38,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from ramulator.pimscope import validate_aggregate
+
 
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "results"
 FIGURE_DIRNAME = "figures"
@@ -149,6 +151,11 @@ def _part_cache_matches(path: Path, task: dict) -> bool:
 def _write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_aggregate_json(path: Path, payload: dict, *, kind: str) -> None:
+    validate_aggregate(payload, kind=kind)
+    _write_json(path, payload)
 
 
 def _write_part(result: dict, task: dict) -> None:
@@ -323,14 +330,15 @@ def _assemble_cross_model(output_dir: Path, decode_path: Path, prefill_path: Pat
         raise RuntimeError(
             f"decode assembly produced {len(decode_rows)} rows, expected {expected_decode_rows}"
         )
-    _write_json(decode_path, {
+    _write_aggregate_json(decode_path, {
         "schema_version": 1,
+        "schema_name": "pimscope-decode-aggregate-v1",
         "figure_id": "fig18_cross_model_decode_cycles",
         "description": "Cross-model dense decode backend replay cycles",
         "phase": "decode",
         "metric_units": {"cycles": "cycles", "runtime_ns": "ns"},
         "provenance": _provenance(),
-        "rows": decode_rows})
+        "rows": decode_rows}, kind="decode_cycles")
     print(f"wrote {decode_path} ({len(decode_rows)} rows)")
     _assemble_cross_model_prefill(output_dir, prefill_path)
 
@@ -380,15 +388,16 @@ def _assemble_cross_model_prefill(output_dir: Path, prefill_path: Path) -> None:
         raise RuntimeError(
             f"prefill assembly produced {len(prefill_rows)} rows, expected {expected_prefill_rows}"
         )
-    _write_json(prefill_path, {
+    _write_aggregate_json(prefill_path, {
         "schema_version": 1,
+        "schema_name": "pimscope-prefill-aggregate-v1",
         "figure_id": "fig22_cross_model_prefill_cycles",
         "description": "Cross-model dense prefill backend replay cycles",
         "phase": "prefill",
         "metric_units": {"cycles": "cycles", "runtime_ns": "ns"},
         "provenance": _provenance(prompt_len=P),
         "rows": prefill_rows,
-        "caveats": ["Simulator-diagnostic cycles, not silicon-calibrated"]})
+        "caveats": ["Simulator-diagnostic cycles, not silicon-calibrated"]}, kind="prefill_cycles")
     print(f"wrote {prefill_path} ({len(prefill_rows)} rows)")
 
 
@@ -433,8 +442,10 @@ def render_cross_model(output_dir: Path) -> None:
         ax.legend(loc="upper left", bbox_to_anchor=(0.0, 1.12), frameon=False, handlelength=1.0)
         _grid(ax, "y")
 
-    d_rows = json.loads((output_dir / DECODE_JSON).read_text("utf-8"))["rows"]
-    p_rows = json.loads((output_dir / PREFILL_JSON).read_text("utf-8"))["rows"]
+    decode_payload = json.loads((output_dir / DECODE_JSON).read_text("utf-8"))
+    prefill_payload = json.loads((output_dir / PREFILL_JSON).read_text("utf-8"))
+    d_rows = validate_aggregate(decode_payload, kind="decode_cycles")["rows"]
+    p_rows = validate_aggregate(prefill_payload, kind="prefill_cycles")["rows"]
     fig = plt.figure(figsize=(10.5, 3.2))
     fig.subplots_adjust(left=0.06, right=0.995, bottom=0.32, top=0.88, wspace=0.15)
     _panel(fig.add_subplot(1, 2, 1), d_rows, title="(a) Decode backend cycles")
@@ -453,8 +464,8 @@ PIM_SHARING_WORKLOADS = tuple(
         "gemma-2b", "gemma-7b", "gemma2-9b", "gemma2-27b", "mixtral-8x7b"))
 
 PIM_CONFIGS = {
-    "k1": {"pim_banks_per_mpu": 1, "pim_mac_execution_model": "shared_mpu_serial"},
-    "k2": {"pim_banks_per_mpu": 2, "pim_mac_execution_model": "shared_mpu_serial"},
+    "k1": {"pim_banks_per_block": 1, "pim_mac_execution_model": "shared_block_serial"},
+    "k2": {"pim_banks_per_block": 2, "pim_mac_execution_model": "shared_block_serial"},
 }
 
 
@@ -539,8 +550,8 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
 
         cycles_k1, cycles_k2 = int(k1["cycles"]), int(k2["cycles"])
         slowdown = (cycles_k2 / cycles_k1) if cycles_k1 > 0 else 0.0
-        mpu_stalls_k2 = int(k2.get("pim_mpu_group_stalls", 0) or 0)
-        stall_pct = (mpu_stalls_k2 / cycles_k2 * 100.0) if cycles_k2 > 0 else 0.0
+        shared_block_stalls_k2 = int(k2.get("pim_shared_block_stalls", 0) or 0)
+        stall_pct = (shared_block_stalls_k2 / cycles_k2 * 100.0) if cycles_k2 > 0 else 0.0
         label = f"{model_name} {wl['phase']}"
         if wl["phase"] == "decode" and wl.get("past_len"):
             label += f" (past={wl['past_len']})"
@@ -560,13 +571,13 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
             "pim_ab_completion_latency_cycles_k2": int(
                 k2.get("pim_ab_completion_latency_cycles", 0) or 0
             ),
-            "pim_mpu_group_stalls_k2": mpu_stalls_k2,
+            "pim_shared_block_stalls_k2": shared_block_stalls_k2,
             "pim_dependency_stalls_k2": int(k2.get("pim_dependency_stalls", 0) or 0),
             "pim_capacity_stalls_k2": int(k2.get("pim_capacity_stalls", 0) or 0),
             "num_bank_timing_blocked_k2": int(k2.get("num_bank_timing_blocked_cycles", 0) or 0),
             "shared_block_stall_pct": round(stall_pct, 2),
-            "pim_banks_per_mpu_k1": int(k1.get("pim_banks_per_mpu", 1) or 1),
-            "pim_banks_per_mpu_k2": int(k2.get("pim_banks_per_mpu", 2) or 2),
+            "pim_banks_per_block_k1": int(k1.get("pim_banks_per_block", 1) or 1),
+            "pim_banks_per_block_k2": int(k2.get("pim_banks_per_block", 2) or 2),
             "replay_ok_k1": bool(k1.get("replay_ok")), "replay_ok_k2": bool(k2.get("replay_ok"))})
 
     expected_rows = len(PIM_SHARING_WORKLOADS)
@@ -574,11 +585,12 @@ def _assemble_pim_sharing(output_dir: Path, path: Path) -> None:
         raise RuntimeError(
             f"pim-sharing assembly produced {len(rows)} rows, expected {expected_rows}"
         )
-    _write_json(path, {
+    _write_aggregate_json(path, {
         "schema_version": 1,
-        "description": "Transformer-trace PIM comparison: CD-PIM dedicated per-bank (k=1) vs shared-MPU 2-banks/MPU (k=2)",
+        "schema_name": "pimscope-sharing-aggregate-v1",
+        "description": "Transformer-trace PIM comparison: CD-PIM dedicated per-bank (k=1) vs shared PIM block across 2 banks (k=2)",
         "provenance": _provenance(),
-        "rows": rows})
+        "rows": rows}, kind="pim_sharing_comparison")
     print(f"wrote {path} ({len(rows)} rows)")
 
 

@@ -2,14 +2,15 @@ import json
 from pathlib import Path
 
 import pytest
+from ramulator.pimscope import count_concrete_opcodes
 
 from scripts.gen_figures import (
     _load_required_part,
     _part_cache_matches,
     _run_tasks,
+    _write_aggregate_json,
     _write_part,
 )
-from ramulator.pimscope import count_concrete_opcodes
 
 
 def test_run_tasks_fails_closed_when_a_worker_fails():
@@ -44,7 +45,7 @@ def test_part_cache_is_configuration_aware(tmp_path: Path):
         "mode": "steady_state",
         "materialize_weights": False,
         "part_path": str(tmp_path / "part.json"),
-        "pim_cfg_override": {"pim_banks_per_mpu": 2},
+        "pim_cfg_override": {"pim_banks_per_block": 2},
         "max_inflight_requests": 16,
         "mac_mode": "per_kind",
     }
@@ -61,3 +62,21 @@ def test_pim_broadcast_count_comes_from_concrete_opcodes():
         {"opcode": "PIM_MAC", "repeat": 5},
     ]
     assert count_concrete_opcodes(records)["PIM_BCAST"] == 3
+
+
+def test_aggregate_writer_rejects_invalid_rows(tmp_path: Path):
+    path = tmp_path / "decode_cycles.json"
+    valid = {
+        "schema_version": 1,
+        "schema_name": "pimscope-decode-aggregate-v1",
+        "phase": "decode",
+        "rows": [{"cycles": 1, "runtime_ns": 2.0, "replay_status": "PASS"}],
+    }
+    _write_aggregate_json(path, valid, kind="decode_cycles")
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_name"] == (
+        "pimscope-decode-aggregate-v1"
+    )
+
+    invalid = {**valid, "rows": [{"cycles": -1}]}
+    with pytest.raises(ValueError, match="non-negative"):
+        _write_aggregate_json(path, invalid, kind="decode_cycles")

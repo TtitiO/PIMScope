@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from ramulator.pimscope import (
     apply_overrides,
     create_dram,
@@ -23,13 +22,13 @@ def test_example_manifest_resolves_with_stable_fingerprint():
     second = resolve_experiment_manifest(_example_manifest(), source="other-path")
     assert first.fingerprint == second.fingerprint
     assert first.manifest["workload"]["model"] == "opt-125m"
-    assert first.manifest["hardware"]["pim"]["pim_banks_per_mpu"] == 2
+    assert first.manifest["hardware"]["pim"]["pim_banks_per_block"] == 2
 
 
 def test_unknown_and_invalid_fields_fail_with_dotted_path():
     raw = _example_manifest()
-    raw["hardware"]["pim"]["pim_bank_per_mpu"] = 2
-    with pytest.raises(ValueError, match=r"hardware\.pim: unknown field.*pim_bank_per_mpu"):
+    raw["hardware"]["pim"]["pim_bank_per_block"] = 2
+    with pytest.raises(ValueError, match=r"hardware\.pim: unknown field.*pim_bank_per_block"):
         resolve_experiment_manifest(raw)
 
     raw = _example_manifest()
@@ -82,9 +81,9 @@ def test_backend_factory_supports_nested_rit_mapper():
 def test_cli_style_override_changes_resolved_hardware():
     raw = apply_overrides(
         _example_manifest(),
-        ["hardware.pim.pim_banks_per_mpu=1", "workload.past_len=64"],
+        ["hardware.pim.pim_banks_per_block=1", "workload.past_len=64"],
     )
     resolved = resolve_experiment_manifest(raw)
     backend = hardware_config_from_manifest(resolved)
-    assert backend["dram_kwargs"]["pim_banks_per_mpu"] == 1
+    assert backend["dram_kwargs"]["pim_banks_per_block"] == 1
     assert resolved.manifest["workload"]["past_len"] == 64

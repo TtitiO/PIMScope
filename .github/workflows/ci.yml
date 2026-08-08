@@ -50,6 +50,7 @@ jobs:
             tests/unit_tests \
             tests/test_LPDDR5_params.py \
             tests/test_lpddr5_pim_config.py \
+            tests/test_lpddr5_pim_addressing.py \
             tests/test_REFpb.py \
             tests/pimscope
 
@@ -66,6 +67,24 @@ jobs:
           .venv/bin/pimscope validate configs/example_custom.json
           .venv/bin/pimscope run configs/example_custom_model.json \
             --output /tmp/pimscope-custom-model.json
+          .venv/bin/pimscope validate-result /tmp/pimscope-custom-model.json
+          .venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          from ramulator.pimscope import validate_aggregate
+          payload = {
+              "schema_version": 1,
+              "schema_name": "pimscope-decode-aggregate-v1",
+              "phase": "decode",
+              "rows": [{"cycles": 1, "runtime_ns": 1.0, "replay_status": "PASS"}],
+          }
+          validate_aggregate(payload, kind="decode_cycles")
+          Path("/tmp/pimscope-aggregate-check.json").write_text(
+              json.dumps(payload) + "\\n", encoding="utf-8"
+          )
+          PY
+          .venv/bin/pimscope validate-aggregate \
+            /tmp/pimscope-aggregate-check.json --kind decode_cycles
           .venv/bin/python scripts/gen_figures.py --help
           .venv/bin/python -m pytest -q tests
 

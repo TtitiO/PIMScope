@@ -2,7 +2,7 @@
 
 PIMScope is an open-source LPDDR5-PIM extension built on
 [Ramulator 2.1](https://github.com/CMU-SAFARI/ramulator2). It adds explicit
-single-bank and rank-scoped PIM commands, shared-MPU resource modeling,
+single-bank and rank-scoped PIM commands, shared-block resource modeling,
 command/completion timing separation, PIM-aware trace frontends, workload
 lowering, and structural power-accounting hooks.
 
@@ -163,14 +163,14 @@ Small parameter sweeps can use command-line overrides without editing source:
 
 ```bash
 .venv/bin/pimscope run configs/example_custom.json \
-  --set hardware.pim.pim_banks_per_mpu=1 \
+  --set hardware.pim.pim_banks_per_block=1 \
   --set workload.past_len=64 \
   --output results/custom/per-bank.json
 ```
 
 The interface exposes organization/timing presets and overrides, PIM datatype
-and resources, MPU sharing, timing and energy terms, scheduler, refresh, row
-policy, address/channel mappers, decode/prefill lengths, materialization,
+and resources, shared-block grouping, timing and energy terms, scheduler,
+refresh, row policy, address/channel mappers, decode/prefill lengths, materialization,
 concurrency, lowering mode, built-in model keys, and custom dense model
 dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
 first interface is deliberately bounded to the validated one-controller/channel
@@ -183,9 +183,11 @@ The paper reproduction command intentionally remains fixed to the versioned
 paper configuration. The reusable researcher-facing simulator API is
 `ramulator.pimscope`, and the Ramulator fork also installs the standalone
 `ramulator-pimscope` command. The parent `pimscope` command is a thin
-compatibility adapter over that API. The lower-level typed Python component API
-remains available for simulator developers, but architecture researchers should
-not need to edit generated C++ or the artifact scripts for ordinary sweeps.
+compatibility adapter over that API. Saved results and concrete traces can be
+validated independently with `pimscope validate-result` and
+`pimscope validate-trace`. The lower-level typed Python component API remains
+available for simulator developers, but architecture researchers should not
+need to edit generated C++ or the artifact scripts for ordinary sweeps.
 
 ## Modeling scope
 
@@ -194,8 +196,8 @@ each name is a literal public JEDEC command. In particular:
 
 - command launch interval and request completion latency are separate;
 - per-bank completion includes pipeline, movement, and writeback residency;
-- `shared_mpu_serial` serializes banks that share an MPU;
-- `PIM_MAC_AB` is rank-scoped and completes according to the shared-MPU model;
+- `shared_block_serial` serializes banks that share a PIM block;
+- `PIM_MAC_AB` is rank-scoped and completes according to the shared-block model;
 - all-bank mode transitions and refresh interactions are modeled explicitly;
 - datatype-driven timing behavior is opt-in and validated.
 

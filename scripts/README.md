@@ -35,7 +35,7 @@ manifest, for example:
 
 ```bash
 .venv/bin/pimscope run configs/example_custom.json \
-  --set hardware.pim.pim_banks_per_mpu=1 \
+  --set hardware.pim.pim_banks_per_block=1 \
   --set workload.past_len=64 \
   --output results/custom/per-bank.json
 ```
@@ -45,7 +45,9 @@ fails before trace generation for unknown fields, unsupported components,
 invalid topology/resource values, or mismatched workload/PIM datatypes. The
 current public runner supports LPDDR5PIM and the built-in dense model registry
 plus custom dense model dimension manifests; custom models remain structured
-surrogates, not runtime traces.
+surrogates, not runtime traces. Saved results can be checked independently with
+`pimscope validate-result`; concrete opcode JSONL files can be checked with
+`pimscope validate-trace --config <manifest> <trace.jsonl>`.
 
 ## Reproduce everything
 
@@ -103,7 +105,7 @@ LPDDR5-PIM timing/resource contract; they are not silicon-calibrated runtime
 measurements. See the
 [LPDDR5-PIM execution semantics](../ramulator2/README.md#lpddr5-pim-execution-semantics)
 for the exact distinction between command issue, request completion, bank-slot
-occupancy, and shared-MPU serialization.
+occupancy, and shared-block serialization.
 
 ## Practical requirements
 

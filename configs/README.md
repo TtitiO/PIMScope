@@ -27,13 +27,14 @@ is suitable as a first custom experiment. A second example,
 `configs/example_custom_model.json`, demonstrates a user-supplied dense model
 without modifying the model registry. The output is a structured JSON result
 containing the resolved manifest, simulator organization/timings, concrete
-opcode counts, replay status, cycles, and commit provenance.
+opcode counts, replay status, cycles, and commit provenance. Validate a saved
+result with `.venv/bin/pimscope validate-result results/custom/result.json`.
 
 Override values for sweeps without editing the file:
 
 ```bash
 .venv/bin/pimscope run configs/example_custom.json \
-  --set hardware.pim.pim_banks_per_mpu=1 \
+  --set hardware.pim.pim_banks_per_block=1 \
   --set workload.past_len=64 \
   --output results/custom/k1.json
 ```
@@ -56,8 +57,8 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
     "timing_overrides": {},
     "pim": {
       "pim_datatype": "int8",
-      "pim_banks_per_mpu": 2,
-      "pim_mac_execution_model": "shared_mpu_serial"
+      "pim_banks_per_block": 2,
+      "pim_mac_execution_model": "shared_block_serial"
     },
     "controller": {
       "scheduler": "FRFCFS",
@@ -97,7 +98,7 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 - PIM datatypes: `int8`, `fp16`, `int16`, and `bf16`. The workload lowering
   currently advertises `int8`, `fp16`, and `bf16`; the manifest requires the
   workload and hardware datatypes to agree.
-- Execution models: `shared_mpu_serial` (validated) and
+- Execution models: `shared_block_serial` (validated) and
   `subbank_overlap_experimental` (explicitly experimental).
 - Scheduler: `FRFCFS` or `FRFCFSRowHit`.
 - Refresh: `NoRefresh`, `AllBank`, or `PerBank`.
@@ -119,7 +120,7 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
   [`example_custom_model.json`](example_custom_model.json).
 
 The schema intentionally rejects unknown fields. This prevents a typo such as
-`pim_bank_per_mpu` from silently changing the experiment. Hardware topology and
+`pim_bank_per_block` from silently changing the experiment. Hardware topology and
 PIM resources are validated both by the manifest layer and by
 `LPDDR5PIM.resolve()` before large trace generation begins.
 
@@ -142,4 +143,15 @@ opcode is a public JEDEC command. Results record the exact resolved manifest so
 researchers can reproduce and compare sweeps.
 
 The schema is versioned. Future incompatible changes must increment
-`schema_version` and provide a migration or a clear release note.
+`schema_version` and provide a migration or a clear release note. Concrete
+opcode JSONL traces use the backend schema
+`lpddr5-pim-opcode-v0.2`; validate one against a manifest-derived layout with:
+
+```bash
+.venv/bin/pimscope validate-trace path/to/trace.jsonl \\
+  --config configs/example_custom.json
+```
+
+Legacy MPU configuration/result names are accepted only through a one-release
+compatibility layer, normalized to shared-block names, and accompanied by
+`DeprecationWarning`; conflicting old and new fields fail closed.
