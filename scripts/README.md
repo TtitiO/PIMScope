@@ -43,10 +43,14 @@ manifest, for example:
 Manifests may be JSON or YAML. `validate` prints the resolved configuration and
 fails before trace generation for unknown fields, unsupported components,
 invalid topology/resource values, or mismatched workload/PIM datatypes. The
-current public runner supports LPDDR5PIM and the built-in dense model registry
+manifest explicitly records the topology and currently requires one controller
+and one channel; unsupported multi-controller/channel values fail before backend
+construction. The current public runner supports LPDDR5PIM and the built-in dense model registry
 plus custom dense model dimension manifests; custom models remain structured
 surrogates, not runtime traces. `workload.seed` is validated and recorded in
-result provenance. Saved results can be checked independently with
+result provenance. Run `pimscope doctor --config <manifest>` to check the
+installed package, native extension, LPDDR5-PIM component, and resolved address
+layout. Saved results can be checked independently with
 `pimscope validate-result`; concrete opcode JSONL files can be checked with
 `pimscope validate-trace --config <manifest> <trace.jsonl>`.
 

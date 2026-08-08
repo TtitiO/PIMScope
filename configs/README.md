@@ -70,6 +70,10 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
       "clock_ratio": 1,
       "channel_mapper": "CacheLineInterleave"
     },
+    "topology": {
+      "controllers": 1,
+      "channels": 1
+    },
     "frontend_clock_ratio": 4
   },
   "workload": {
@@ -128,9 +132,14 @@ The schema intentionally rejects unknown fields. This prevents a typo such as
 PIM resources are validated both by the manifest layer and by
 `LPDDR5PIM.resolve()` before large trace generation begins.
 
-The initial CLI instantiates one controller/channel, matching the validated
-paper topology. Semantic PIM bank sequences are retargeted to the selected
-organization's resolved bank-unit count. The concrete host-byte mapper is now
+The manifest records the supported topology explicitly with
+`hardware.topology.controllers` and `hardware.topology.channels`; both must be
+`1` in the current public runner. Unsupported multi-controller or multi-channel
+values fail during manifest validation, before backend construction or trace
+generation, rather than being silently pinned to channel/rank zero. The initial
+CLI instantiates one controller/channel, matching the validated paper topology.
+Semantic PIM bank sequences are retargeted to the selected organization's
+resolved bank-unit count. The concrete host-byte mapper is now
 mixed-radix and derived from the resolved hierarchy, including physical and
 address-level sizes, transaction bytes, and capacity. Selecting a mapper
 component does not imply validated multi-channel support; multi-controller and

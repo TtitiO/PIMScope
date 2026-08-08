@@ -173,11 +173,15 @@ and resources, shared-block grouping, timing and energy terms, scheduler,
 refresh, row policy, address/channel mappers, decode/prefill lengths, materialization,
 concurrency, an explicit recorded seed, lowering mode, built-in model keys, and
 custom dense model dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
-first interface is deliberately bounded to the validated one-controller/channel
-LPDDR5-PIM topology. Within that scope, host-byte mapping is derived from the
-resolved hierarchy and capacity; multi-controller/channel mapping remains an
-explicit open issue. See [`configs/README.md`](configs/README.md) for the
-complete schema and current scope.
+first interface records and validates an explicit topology, but is deliberately
+bounded to the validated one-controller/channel LPDDR5-PIM topology. Values
+other than `hardware.topology.controllers=1` and
+`hardware.topology.channels=1` fail before backend construction; they are not
+silently mapped to channel/rank zero. Within the supported scope, host-byte
+mapping is derived from the resolved hierarchy and capacity;
+multi-controller/channel simulation remains an explicit open issue. See
+[`configs/README.md`](configs/README.md) for the complete schema and current
+scope.
 
 The paper reproduction command intentionally remains fixed to the versioned
 paper configuration. The reusable researcher-facing simulator API is
@@ -185,7 +189,9 @@ paper configuration. The reusable researcher-facing simulator API is
 `ramulator-pimscope` command. The parent `pimscope` command is a thin
 compatibility adapter over that API. Saved results and concrete traces can be
 validated independently with `pimscope validate-result` and
-`pimscope validate-trace`. The lower-level typed Python component API remains
+`pimscope validate-trace`. Run `pimscope doctor` to verify the imported
+Ramulator package, native extension, LPDDR5-PIM component, and optionally a
+manifest/backend before starting a larger experiment. The lower-level typed Python component API remains
 available for simulator developers, but architecture researchers should not
 need to edit generated C++ or the artifact scripts for ordinary sweeps.
 

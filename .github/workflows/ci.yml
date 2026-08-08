@@ -64,6 +64,7 @@ jobs:
             --output /tmp/ramulator-pimscope-result.json
           .venv/bin/pimscope-artifacts --help
           .venv/bin/pimscope --help
+          .venv/bin/pimscope doctor --config configs/example_custom.json
           .venv/bin/pimscope validate configs/example_custom.json
           .venv/bin/pimscope run configs/example_custom_model.json \
             --output /tmp/pimscope-custom-model.json
@@ -85,6 +86,12 @@ jobs:
           PY
           .venv/bin/pimscope validate-aggregate \
             /tmp/pimscope-aggregate-check.json --kind decode_cycles
+          if .venv/bin/pimscope validate configs/example_custom.json \
+            --set hardware.topology.channels=2 >/tmp/unsupported-topology.out 2>/tmp/unsupported-topology.err; then
+            echo "unsupported multi-channel topology unexpectedly validated" >&2
+            exit 1
+          fi
+          grep -q "hardware.topology.channels" /tmp/unsupported-topology.err
           .venv/bin/python scripts/gen_figures.py --help
           .venv/bin/python -m pytest -q tests
 

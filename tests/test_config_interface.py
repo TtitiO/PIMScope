@@ -42,6 +42,18 @@ def test_unknown_and_invalid_fields_fail_with_dotted_path():
         resolve_experiment_manifest(raw)
 
 
+def test_unsupported_topology_fails_before_backend_construction():
+    raw = _example_manifest()
+    raw["hardware"]["topology"] = {"controllers": 2, "channels": 1}
+    with pytest.raises(ValueError, match=r"hardware\.topology\.controllers.*unsupported"):
+        resolve_experiment_manifest(raw)
+
+    raw = _example_manifest()
+    raw["hardware"]["topology"] = {"controllers": 1, "channels": 2}
+    with pytest.raises(ValueError, match=r"hardware\.topology\.channels.*unsupported"):
+        resolve_experiment_manifest(raw)
+
+
 def test_workload_and_hardware_datatypes_must_match():
     raw = _example_manifest()
     raw["workload"]["datatype"] = "fp16"
