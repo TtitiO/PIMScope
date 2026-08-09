@@ -56,6 +56,28 @@ def test_lpddr6_result_records_backend_and_trace_schema():
     assert validate_result(result)["status"] == "PASS"
     assert result["simulation"]["dram_class"] == "LPDDR6PIM"
     assert result["simulation"]["trace_schema"] == "lpddr6-pim-opcode-v0.1"
+    energy = result["simulation"]["power_accounting"]
+    assert energy["status"] == "pim_event_coefficients_only"
+    assert energy["standard_background_command_energy_available"] is False
+    assert energy["total_energy_pJ"] is None
+
+
+def test_result_schema_rejects_lpddr6_standard_power_claim():
+    raw = load_raw_manifest(EXAMPLE)
+    raw["hardware"]["dram_class"] = "LPDDR6PIM"
+    raw["hardware"]["org_preset"] = "LPDDR6_16Gb_x12"
+    raw["hardware"]["timing_preset"] = "LPDDR6_10667_BL24"
+    raw["workload"]["past_len"] = 1
+    raw["workload"]["max_inflight_requests"] = 1
+    resolved = resolve_experiment_manifest(raw, source="schema-power-test")
+    from ramulator.pimscope.experiment import run_experiment
+
+    result = run_experiment(resolved)
+    result["simulation"]["power_accounting"][
+        "standard_background_command_energy_available"
+    ] = True
+    with pytest.raises(ValueError, match="standard background/command energy"):
+        validate_result(result)
 
 
 def test_result_schema_rejects_backend_trace_schema_mismatch():
