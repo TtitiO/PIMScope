@@ -96,6 +96,12 @@ def test_lpddr6_pim_two_rank_mapping_preserves_rank_boundary_and_capacity():
     bytes_per_rank = layout["capacity_bytes"] // 2
 
     assert layout["dram_class"] == "LPDDR6PIM"
+    assert layout["subchannel_model"] == {
+        "status": "single_subchannel_only",
+        "modeled_subchannels_per_channel": 1,
+        "refresh_density_reference_subchannels": 2,
+        "independent_subchannel_scheduling": False,
+    }
     assert layout["level_sizes"] == [1, 2, 4, 4, 65536, 1024]
     assert layout["total_bank_units"] == 32
     assert layout["capacity_bytes"] == 1 << 32
@@ -226,6 +232,9 @@ def test_public_lpddr6_pim_manifest_resolves_two_rank_organization():
     assert backend["organization"]["rank"] == 2
     assert backend["address_layout"]["level_sizes"] == [1, 2, 4, 4, 65536, 1024]
     assert backend["address_layout"]["capacity_bytes"] == 1 << 32
+    assert backend["address_layout"]["subchannel_model"]["status"] == (
+        "single_subchannel_only"
+    )
 
 
 def test_interleaving_level_override_cannot_bypass_resolved_hierarchy():

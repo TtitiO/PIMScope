@@ -56,10 +56,34 @@ def test_lpddr6_result_records_backend_and_trace_schema():
     assert validate_result(result)["status"] == "PASS"
     assert result["simulation"]["dram_class"] == "LPDDR6PIM"
     assert result["simulation"]["trace_schema"] == "lpddr6-pim-opcode-v0.1"
+    assert result["resolved_hardware"]["address_layout"]["subchannel_model"] == {
+        "status": "single_subchannel_only",
+        "modeled_subchannels_per_channel": 1,
+        "refresh_density_reference_subchannels": 2,
+        "independent_subchannel_scheduling": False,
+    }
     energy = result["simulation"]["power_accounting"]
     assert energy["status"] == "pim_event_coefficients_only"
     assert energy["standard_background_command_energy_available"] is False
     assert energy["total_energy_pJ"] is None
+
+
+def test_result_schema_rejects_unsupported_lpddr6_subchannel_claim():
+    raw = load_raw_manifest(EXAMPLE)
+    raw["hardware"]["dram_class"] = "LPDDR6PIM"
+    raw["hardware"]["org_preset"] = "LPDDR6_16Gb_x12"
+    raw["hardware"]["timing_preset"] = "LPDDR6_10667_BL24"
+    raw["workload"]["past_len"] = 1
+    raw["workload"]["max_inflight_requests"] = 1
+    resolved = resolve_experiment_manifest(raw, source="schema-subchannel-test")
+    from ramulator.pimscope.experiment import run_experiment
+
+    result = run_experiment(resolved)
+    result["resolved_hardware"]["address_layout"]["subchannel_model"][
+        "independent_subchannel_scheduling"
+    ] = True
+    with pytest.raises(ValueError, match="unsupported LPDDR6 sub-channel interpretation"):
+        validate_result(result)
 
 
 def test_result_schema_rejects_lpddr6_standard_power_claim():
