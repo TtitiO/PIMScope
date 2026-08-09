@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from ramulator.dram.addressing import (
     addr_vec_from_byte_address,
     extract_dram_layout,
@@ -21,6 +20,19 @@ def _layout(preset: str = "LPDDR5_8Gb_x16", **org_overrides):
         {
             "org_preset": preset,
             "timing_preset": "LPDDR5_6400",
+            "dram_kwargs": org_overrides,
+            "frontend_clock_ratio": 4,
+        }
+    )
+    return extract_dram_layout(dram)
+
+
+def _lpddr6_layout(**org_overrides):
+    dram = create_dram(
+        {
+            "dram_class": "LPDDR6PIM",
+            "org_preset": "LPDDR6_16Gb_x12",
+            "timing_preset": "LPDDR6_10667_BL24",
             "dram_kwargs": org_overrides,
             "frontend_clock_ratio": 4,
         }
@@ -77,6 +89,18 @@ def test_rank_override_participates_in_mixed_radix_mapping():
     assert mapped[layout["rank_pos"]] == 1
     assert mapped[layout["row_pos"]] == 0
     assert mapped[layout["col_pos"]] == 0
+
+
+def test_lpddr6_pim_two_rank_mapping_preserves_rank_boundary_and_capacity():
+    layout = _lpddr6_layout(rank=2)
+    bytes_per_rank = layout["capacity_bytes"] // 2
+
+    assert layout["dram_class"] == "LPDDR6PIM"
+    assert layout["level_sizes"] == [1, 2, 4, 4, 65536, 1024]
+    assert layout["total_bank_units"] == 32
+    assert layout["capacity_bytes"] == 1 << 32
+    assert _map(bytes_per_rank, layout) == [0, 1, 0, 0, 0, 0]
+    assert _map(layout["capacity_bytes"] - 1, layout) == [0, 1, 3, 3, 65535, 63]
 
 
 def test_coordinate_validation_reports_level_name_and_range():
@@ -184,6 +208,24 @@ def test_validate_backend_reports_resolved_address_layout():
     assert backend["address_layout"]["address_level_sizes"][-1] == 64
     assert backend["address_layout"]["tx_bytes"] == 32
     assert backend["address_layout"]["capacity_bytes"] == 1 << 30
+
+
+def test_public_lpddr6_pim_manifest_resolves_two_rank_organization():
+    raw = json.loads(
+        (Path(__file__).parents[1] / "configs" / "example_custom.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    raw["hardware"]["dram_class"] = "LPDDR6PIM"
+    raw["hardware"]["org_preset"] = "LPDDR6_16Gb_x12"
+    raw["hardware"]["timing_preset"] = "LPDDR6_10667_BL24"
+    raw["hardware"]["org_overrides"] = {"rank": 2}
+
+    backend = validate_backend(resolve_experiment_manifest(raw))
+
+    assert backend["organization"]["rank"] == 2
+    assert backend["address_layout"]["level_sizes"] == [1, 2, 4, 4, 65536, 1024]
+    assert backend["address_layout"]["capacity_bytes"] == 1 << 32
 
 
 def test_interleaving_level_override_cannot_bypass_resolved_hierarchy():
