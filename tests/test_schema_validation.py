@@ -63,9 +63,17 @@ def test_lpddr6_result_records_backend_and_trace_schema():
         "independent_subchannel_scheduling": False,
     }
     energy = result["simulation"]["power_accounting"]
-    assert energy["status"] == "pim_event_coefficients_only"
-    assert energy["standard_background_command_energy_available"] is False
-    assert energy["total_energy_pJ"] is None
+    assert energy["status"] == "experimental_drampower_reference"
+    assert energy["standard_background_command_energy_available"] is True
+    assert energy["standard_power_calibrated_to_device"] is False
+    assert energy["power_profile"] == "DRAMPOWER_V620_LPDDR6_TEST_PROFILE"
+    # DRAMPower v6.2 fixture currents are converted from A to mA. The native
+    # equations then use V * mA * ns = pJ without the LPDDR5 legacy scale.
+    assert energy["total_standard_energy_pJ"] == pytest.approx(411187220.4375)
+    assert energy["total_pim_event_energy_pJ"] == pytest.approx(46328260.71)
+    assert energy["total_energy_pJ"] == pytest.approx(
+        energy["total_standard_energy_pJ"] + energy["total_pim_event_energy_pJ"]
+    )
 
 
 def test_result_schema_rejects_unsupported_lpddr6_subchannel_claim():
@@ -86,7 +94,7 @@ def test_result_schema_rejects_unsupported_lpddr6_subchannel_claim():
         validate_result(result)
 
 
-def test_result_schema_rejects_lpddr6_standard_power_claim():
+def test_result_schema_rejects_lpddr6_device_calibration_claim():
     raw = load_raw_manifest(EXAMPLE)
     raw["hardware"]["dram_class"] = "LPDDR6PIM"
     raw["hardware"]["org_preset"] = "LPDDR6_16Gb_x12"
@@ -98,9 +106,9 @@ def test_result_schema_rejects_lpddr6_standard_power_claim():
 
     result = run_experiment(resolved)
     result["simulation"]["power_accounting"][
-        "standard_background_command_energy_available"
+        "standard_power_calibrated_to_device"
     ] = True
-    with pytest.raises(ValueError, match="standard background/command energy"):
+    with pytest.raises(ValueError, match="must not claim device calibration"):
         validate_result(result)
 
 
