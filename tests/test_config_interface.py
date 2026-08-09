@@ -42,10 +42,10 @@ def test_unknown_and_invalid_fields_fail_with_dotted_path():
         resolve_experiment_manifest(raw)
 
 
-def test_generic_lpddr6_is_rejected_as_an_unimplemented_pim_backend():
+def test_generic_lpddr6_requires_an_explicit_pim_backend_name():
     raw = _example_manifest()
     raw["hardware"]["dram_class"] = "LPDDR6"
-    with pytest.raises(ValueError, match=r"generic LPDDR6.*LPDDR6-PIM is not implemented"):
+    with pytest.raises(ValueError, match=r"generic LPDDR6.*select LPDDR6PIM explicitly"):
         resolve_experiment_manifest(raw)
 
 

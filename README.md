@@ -151,11 +151,12 @@ docker compose exec ramulator2 bash
 
 ## Configure workloads and LPDDR5-PIM
 
-The current public PIMScope backend is intentionally LPDDR5-PIM-specific.
-Ramulator also contains a generic LPDDR6 DRAM standard, but LPDDR6-PIM is not
-enabled by this interface yet. LPDDR6 support requires standard-specific PIM
-commands, controller scheduling, trace vocabulary, hierarchy/sub-channel
-mapping, refresh interaction, and power semantics; it is tracked as P1-27 in
+The public PIMScope backend supports LPDDR5-PIM and an experimental LPDDR6-PIM
+backend. Generic LPDDR6 is not interchangeable with LPDDR6PIM. The LPDDR6-PIM
+path uses LPDDR6-specific CAS/short-long access timing and hierarchy mapping,
+but standard LPDDR6 background/command power is not yet available and the
+backend is not used by paper artifacts. Remaining adaptation and validation
+work is tracked as P1-27 in
 [`OPEN_SOURCE_READINESS_ISSUES.md`](OPEN_SOURCE_READINESS_ISSUES.md).
 
 Custom studies use a versioned, validated JSON/YAML manifest and the installed
@@ -181,7 +182,7 @@ refresh, row policy, address/channel mappers, decode/prefill lengths, materializ
 concurrency, an explicit recorded seed, lowering mode, built-in model keys, and
 custom dense model dimensions. Unknown or inconsistent fields fail with a dotted-path error. The
 first interface records and validates an explicit topology, but is deliberately
-bounded to the validated one-controller/channel LPDDR5-PIM topology. Values
+bounded to the validated one-controller/channel PIM topology. Values
 other than `hardware.topology.controllers=1` and
 `hardware.topology.channels=1` fail before backend construction; they are not
 silently mapped to channel/rank zero. Within the supported scope, host-byte
@@ -197,7 +198,7 @@ paper configuration. The reusable researcher-facing simulator API is
 compatibility adapter over that API. Saved results and concrete traces can be
 validated independently with `pimscope validate-result` and
 `pimscope validate-trace`. Run `pimscope doctor` to verify the imported
-Ramulator package, native extension, LPDDR5-PIM component, and optionally a
+Ramulator package, native extension, selected PIM component, and optionally a
 manifest/backend before starting a larger experiment. The lower-level typed Python component API remains
 available for simulator developers, but architecture researchers should not
 need to edit generated C++ or the artifact scripts for ordinary sweeps.

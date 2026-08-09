@@ -95,11 +95,11 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 
 ## Accepted values and current scope
 
-- `dram_class`: currently `LPDDR5PIM` only. The maintained Ramulator fork also
-  exposes generic `LPDDR6`, but LPDDR6-PIM is planned work tracked in
-  `OPEN_SOURCE_READINESS_ISSUES.md` as P1-27 and is intentionally rejected by
-  the public runner until its command, timing, trace, hierarchy, refresh, and
-  power contracts are validated.
+- `dram_class`: `LPDDR5PIM` is supported and `LPDDR6PIM` is experimental. The
+  maintained fork also exposes generic `LPDDR6`, which is not a PIM backend.
+  LPDDR6PIM is tracked in `OPEN_SOURCE_READINESS_ISSUES.md` as P1-27 and is not used by the
+  paper artifacts, and its command, timing, trace, hierarchy, refresh, and
+  standard-power limitations must remain explicit in reported results.
 - Organization/timing names are resolved by the checked-out Ramulator fork;
   invalid names fail during backend validation. Supported host-byte mapping
   derives all hierarchy bounds from the resolved organization and rejects
@@ -133,8 +133,8 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 
 The schema intentionally rejects unknown fields. This prevents a typo such as
 `pim_bank_per_block` from silently changing the experiment. Hardware topology and
-PIM resources are validated both by the manifest layer and by
-`LPDDR5PIM.resolve()` before large trace generation begins.
+PIM resources are validated both by the manifest layer and by the selected
+`LPDDR5PIM.resolve()` or `LPDDR6PIM.resolve()` before large trace generation begins.
 
 The manifest records the supported topology explicitly with
 `hardware.topology.controllers` and `hardware.topology.channels`; both must be
@@ -153,7 +153,7 @@ traffic uses `bounded_surrogate_v1` and records that policy explicitly.
 
 ## Interpretation boundary
 
-A custom result is a command-level LPDDR5-PIM simulation of a structured
+A custom result is a command-level LPDDR PIM simulation of a structured
 workload surrogate. It is not a framework/runtime trace, numerical execution,
 checkpoint placement, silicon calibration, or a claim that every abstract PIM
 opcode is a public JEDEC command. Results record the exact resolved manifest so

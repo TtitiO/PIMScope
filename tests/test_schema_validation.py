@@ -42,6 +42,35 @@ def test_aggregate_schema_validates_name_phase_and_rows():
         )
 
 
+def test_lpddr6_result_records_backend_and_trace_schema():
+    raw = load_raw_manifest(EXAMPLE)
+    raw["hardware"]["dram_class"] = "LPDDR6PIM"
+    raw["hardware"]["org_preset"] = "LPDDR6_16Gb_x12"
+    raw["hardware"]["timing_preset"] = "LPDDR6_10667_BL24"
+    raw["workload"]["past_len"] = 1
+    raw["workload"]["max_inflight_requests"] = 1
+    resolved = resolve_experiment_manifest(raw, source="lpddr6-schema-test")
+    from ramulator.pimscope.experiment import run_experiment
+
+    result = run_experiment(resolved)
+    assert validate_result(result)["status"] == "PASS"
+    assert result["simulation"]["dram_class"] == "LPDDR6PIM"
+    assert result["simulation"]["trace_schema"] == "lpddr6-pim-opcode-v0.1"
+
+
+def test_result_schema_rejects_backend_trace_schema_mismatch():
+    raw = load_raw_manifest(EXAMPLE)
+    raw["workload"]["past_len"] = 1
+    raw["workload"]["max_inflight_requests"] = 1
+    resolved = resolve_experiment_manifest(raw, source="schema-mismatch-test")
+    from ramulator.pimscope.experiment import run_experiment
+
+    result = run_experiment(resolved)
+    result["simulation"]["trace_schema"] = "lpddr6-pim-opcode-v0.1"
+    with pytest.raises(ValueError, match="trace_schema"):
+        validate_result(result)
+
+
 def test_result_schema_rejects_fingerprint_mismatch():
     with pytest.raises(ValueError, match="fingerprint"):
         validate_result(
