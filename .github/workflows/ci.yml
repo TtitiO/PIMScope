@@ -77,7 +77,7 @@ jobs:
           .venv/bin/pimscope validate-result /tmp/pimscope-custom-model.json
           .venv/bin/python scripts/gen_figures.py --help
 
-      - name: Validate aggregate and negative topology guard
+      - name: Validate aggregate schema
         run: |
           .venv/bin/python - <<'PY'
           import json
@@ -96,11 +96,15 @@ jobs:
           PY
           .venv/bin/pimscope validate-aggregate \
             /tmp/pimscope-aggregate-check.json --kind decode_cycles
+
+      - name: Validate negative topology guard
+        run: |
           if .venv/bin/pimscope validate configs/example_custom.json \
             --set hardware.topology.channels=2 >/tmp/unsupported-topology.out 2>/tmp/unsupported-topology.err; then
             echo "unsupported multi-channel topology unexpectedly validated" >&2
             exit 1
           fi
+          cat /tmp/unsupported-topology.err
           grep -q "hardware.topology.channels" /tmp/unsupported-topology.err
 
       - name: Run parent regression tests
