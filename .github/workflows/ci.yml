@@ -91,7 +91,7 @@ jobs:
           }
           validate_aggregate(payload, kind="decode_cycles")
           Path("/tmp/pimscope-aggregate-check.json").write_text(
-              json.dumps(payload) + "\\n", encoding="utf-8"
+              json.dumps(payload) + "\n", encoding="utf-8"
           )
           PY
           .venv/bin/pimscope validate-aggregate \
