@@ -54,14 +54,20 @@ jobs:
             tests/test_REFpb.py \
             tests/pimscope
 
-      - name: Run examples and artifact CLI checks
+      - name: Run Ramulator examples
         run: |
           (cd ramulator2 && ../.venv/bin/python examples/example_config.py)
           (cd ramulator2 && ../.venv/bin/python examples/lpddr5_pim_example_config.py)
           (cd ramulator2 && ../.venv/bin/python examples/pimscope_experiment.py)
+
+      - name: Run Ramulator PIMScope CLI
+        run: |
           .venv/bin/ramulator-pimscope validate ramulator2/examples/pimscope_custom_model.json
           .venv/bin/ramulator-pimscope run ramulator2/examples/pimscope_custom_model.json \
             --output /tmp/ramulator-pimscope-result.json
+
+      - name: Run parent PIMScope CLI
+        run: |
           .venv/bin/pimscope-artifacts --help
           .venv/bin/pimscope --help
           .venv/bin/pimscope doctor
@@ -69,6 +75,10 @@ jobs:
           .venv/bin/pimscope run configs/example_custom_model.json \
             --output /tmp/pimscope-custom-model.json
           .venv/bin/pimscope validate-result /tmp/pimscope-custom-model.json
+          .venv/bin/python scripts/gen_figures.py --help
+
+      - name: Validate aggregate and negative topology guard
+        run: |
           .venv/bin/python - <<'PY'
           import json
           from pathlib import Path
@@ -92,8 +102,9 @@ jobs:
             exit 1
           fi
           grep -q "hardware.topology.channels" /tmp/unsupported-topology.err
-          .venv/bin/python scripts/gen_figures.py --help
-          .venv/bin/python -m pytest -q tests
+
+      - name: Run parent regression tests
+        run: .venv/bin/python -m pytest -q tests
 
       - name: Check clean parent tree
         run: git diff --exit-code
