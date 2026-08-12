@@ -1,31 +1,43 @@
 # PIMScope configuration manifests
 
 PIMScope exposes a validated researcher-facing experiment manifest through the
-public `ramulator.pimscope` simulator API. The parent command is a thin adapter
-over that API. JSON and YAML files use the same schema; JSON is used for the
-checked-in example so it works without a YAML parser during source inspection.
+public `ramulator.pimscope` simulator API. The installed `pimscope` command
+resolves directly to `ramulator.pimscope.cli:main`. JSON and YAML files use the
+same schema. The checked-in JSON example keeps each configuration concern
+visible during source inspection.
 
 ## Quick start
 
-From the parent repository, use the compatibility command:
+From the parent repository, use the `pimscope` command:
 
 ```bash
-.venv/bin/pimscope validate configs/example_custom.json
-.venv/bin/pimscope run configs/example_custom.json
+.venv/bin/pimscope validate configs/example.json
+.venv/bin/pimscope run configs/example.json
 ```
 
 The maintained Ramulator fork owns the same implementation and installs a
 standalone command for users of that repository alone:
 
 ```bash
-.venv/bin/ramulator-pimscope validate configs/example_custom.json
-.venv/bin/ramulator-pimscope run configs/example_custom.json
+.venv/bin/ramulator-pimscope validate configs/example.json
+.venv/bin/ramulator-pimscope run configs/example.json
 ```
 
-The example is intentionally small (`OPT-125M`, decode, `past_len: 32`) so it
-is suitable as a first custom experiment. A second example,
-`configs/example_custom_model.json`, demonstrates a user-supplied dense model
-without modifying the model registry. The output is a structured JSON result
+The example composes two explicit and reusable sections:
+
+- [`hardware/lpddr5-pim.json`](hardware/lpddr5-pim.json) defines the DRAM,
+  PIM resources, controller, mapper, topology, and clock ratios;
+- [`workloads/tiny-transformer-decode.json`](workloads/tiny-transformer-decode.json)
+  defines concrete model dimensions and trace-generation parameters.
+
+[`example.json`](example.json) selects those files and defines only the
+experiment name and output. This avoids hidden tag-only configurations and
+avoids copying hardware settings into every workload. A study may also place
+inline `hardware` and `workload` objects in one manifest, but a section cannot
+be supplied both inline and through a file reference.
+
+The example workload is deliberately small and demonstrates a user-supplied
+dense model without modifying the built-in model registry. The output is a structured JSON result
 containing the resolved manifest, simulator organization/timings, concrete
 opcode counts, replay status, cycles, and commit provenance. Validate a saved
 result with `.venv/bin/pimscope validate-result results/custom/result.json`.
@@ -33,7 +45,7 @@ result with `.venv/bin/pimscope validate-result results/custom/result.json`.
 Override values for sweeps without editing the file:
 
 ```bash
-.venv/bin/pimscope run configs/example_custom.json \
+.venv/bin/pimscope run configs/example.json \
   --set hardware.pim.pim_banks_per_block=1 \
   --set workload.past_len=64 \
   --output results/custom/k1.json
@@ -43,7 +55,21 @@ Values are parsed as JSON when possible, so use `true`, `false`, numbers, and
 quoted JSON strings as appropriate. `validate` applies the same overrides and
 prints the canonical resolved manifest plus its SHA-256 fingerprint.
 
-## Manifest shape
+## Composed experiment shape
+
+Paths are resolved relative to the experiment file:
+
+```json
+{
+  "schema_version": 1,
+  "experiment": "my-study",
+  "hardware_file": "hardware/lpddr5-pim.json",
+  "workload_file": "workloads/tiny-transformer-decode.json",
+  "output": {"path": "results/custom/result.json"}
+}
+```
+
+The resolved manifest has the following inline shape:
 
 ```json
 {
@@ -77,6 +103,7 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
     "frontend_clock_ratio": 4
   },
   "workload": {
+    "workload_type": "structured_transformer_surrogate",
     "model": "opt-125m",
     "datatype": "int8",
     "phase": "decode",
@@ -95,11 +122,9 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 
 ## Accepted values and current scope
 
-- `dram_class`: `LPDDR5PIM` is supported and `LPDDR6PIM` is experimental. The
-  maintained fork also exposes generic `LPDDR6`, which is not a PIM backend.
-  LPDDR6PIM is tracked in `OPEN_SOURCE_READINESS_ISSUES.md` as P1-27 and is not used by the
-  paper artifacts, and its command, timing, trace, hierarchy, refresh, and
-  standard-power limitations must remain explicit in reported results.
+- `dram_class`: `LPDDR5PIM` is supported. `LPDDR6PIM` remains an experimental
+  development path in the maintained fork and is not part of the supported
+  tutorial or paper artifacts. Generic `LPDDR6` is not a PIM backend.
 - Organization/timing names are resolved by the checked-out Ramulator fork;
   invalid names fail during backend validation. Supported host-byte mapping
   derives all hierarchy bounds from the resolved organization and rejects
@@ -107,8 +132,7 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 - PIM datatypes: `int8`, `fp16`, `int16`, and `bf16`. The workload lowering
   currently advertises `int8`, `fp16`, and `bf16`; the manifest requires the
   workload and hardware datatypes to agree.
-- Execution models: `shared_block_serial` (validated) and
-  `subbank_overlap_experimental` (explicitly experimental).
+- Execution model: `shared_block_serial`.
 - Scheduler: `FRFCFS` or `FRFCFSRowHit`.
 - Refresh: `NoRefresh`, `AllBank`, or `PerBank`.
 - Row policy: `Open` or `ClosedCAP`.
@@ -119,24 +143,31 @@ prints the canonical resolved manifest plus its SHA-256 fingerprint.
 - `seed`: a non-negative integer recorded in result provenance. The current
   structured workload generators are deterministic; the seed is reserved for
   randomized frontends and future randomized lowering policies.
+- `max_expanded_records` and `max_trace_bytes`: positive preflight limits. The
+  exact concrete expansion count and serialized JSONL size are checked before
+  native replay and recorded in the result.
+- `simulation_timeout_seconds`: process-isolated replay timeout; `0` disables it.
+- `workload_type`: the built-in `structured_transformer_surrogate` workload.
 - Weight residency: `resident` or synthetic `full_preload`. Generated host
   traffic uses the explicit `bounded_surrogate_v1` placement policy: historical
   surrogate address tokens are deterministically placed within the resolved
   device capacity before canonical byte-address mapping. `full_preload` remains
   a paper-style diagnostic, not checkpoint placement or a capacity claim.
 - Phases: `decode` and `prefill`; Mixtral currently supports decode only.
-- Built-in models use the registry in the Ramulator workload-surrogate module.
-  A custom dense model can instead be an object with `name`, `num_layers`,
+- Built-in model keys are `llama2-7b`, `llama2-13b`, `llama2-70b`,
+  `opt-125m`, `opt-350m`, `opt-1.3b`, `qwen25-7b`, `qwen25-14b`,
+  `qwen25-32b`, `qwen25-72b`, `gemma-2b`, `gemma-7b`, `gemma2-9b`,
+  `gemma2-27b`, and `mixtral-8x7b`. A custom dense model can instead be an object with `name`, `num_layers`,
   `hidden_size`, `num_heads`, `head_dim`, and `ffn_hidden_size`, plus optional
   `num_kv_heads`, `ffn_variant`, `activation`, and citation fields. See
-  [`example_custom_model.json`](example_custom_model.json).
+  [`workloads/tiny-transformer-decode.json`](workloads/tiny-transformer-decode.json).
 
-The schema intentionally rejects unknown fields. This prevents a typo such as
+The schema rejects unknown fields, preventing a typo such as
 `pim_bank_per_block` from silently changing the experiment. Hardware topology and
-PIM resources are validated both by the manifest layer and by the selected
-`LPDDR5PIM.resolve()` or `LPDDR6PIM.resolve()` before large trace generation begins.
+PIM resources are validated by the manifest layer and by the selected DRAM
+component before large trace generation begins.
 
-The manifest records the supported topology explicitly with
+The manifest records the supported topology with
 `hardware.topology.controllers` and `hardware.topology.channels`; both must be
 `1` in the current public runner. Unsupported multi-controller or multi-channel
 values fail during manifest validation, before backend construction or trace
@@ -166,9 +197,8 @@ opcode JSONL traces use the backend schema
 
 ```bash
 .venv/bin/pimscope validate-trace path/to/trace.jsonl \\
-  --config configs/example_custom.json
+  --config configs/example.json
 ```
 
-Legacy MPU configuration/result names are accepted only through a one-release
-compatibility layer, normalized to shared-block names, and accompanied by
-`DeprecationWarning`; conflicting old and new fields fail closed.
+Configuration and result fields use the canonical shared-block vocabulary.
+Unknown or outdated fields fail schema validation.

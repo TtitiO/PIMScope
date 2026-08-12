@@ -3,20 +3,32 @@ name = "pimscope"
 version = "0.1.0"
 description = "Command-level LPDDR5-PIM simulation and artifact generation on Ramulator 2.1"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
+    "ramulator==2.1.0",
     "matplotlib>=3.7",
     "numpy>=1.24",
     "PyYAML>=6.0",
 ]
 
 [project.scripts]
-pimscope = "scripts.cli:main"
-pimscope-artifacts = "scripts.gen_figures:main"
+pimscope = "ramulator.pimscope.cli:main"
 
 [build-system]
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["scripts", "scripts.lib"]
+py-modules = []
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+extend-exclude = ["ramulator2", "results"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

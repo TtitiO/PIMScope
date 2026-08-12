@@ -1,0 +1,27 @@
+{
+  "dram_class": "LPDDR5PIM",
+  "org_preset": "LPDDR5_8Gb_x16",
+  "timing_preset": "LPDDR5_6400",
+  "org_overrides": {},
+  "timing_overrides": {},
+  "pim": {
+    "pim_datatype": "int8",
+    "pim_banks_per_block": 2,
+    "pim_mac_execution_model": "shared_block_serial"
+  },
+  "controller": {
+    "scheduler": "FRFCFS",
+    "refresh_manager": "NoRefresh",
+    "row_policy": "Open",
+    "addr_mapper": "PassThroughAddrMapper"
+  },
+  "memory_system": {
+    "clock_ratio": 1,
+    "channel_mapper": "CacheLineInterleave"
+  },
+  "topology": {
+    "controllers": 1,
+    "channels": 1
+  },
+  "frontend_clock_ratio": 4
+}

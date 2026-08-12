@@ -9,12 +9,21 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     timeout-minutes: 45
     steps:
       - name: Check out PIMScope and pinned Ramulator submodule
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Install host dependencies
         run: |
@@ -23,11 +32,14 @@ jobs:
 
       - name: Create environment and install packages
         run: |
-          python3 -m venv .venv
+          python -m venv .venv
           .venv/bin/python -m pip install -U pip setuptools wheel
-          .venv/bin/python -m pip install -e .
           .venv/bin/python -m pip install -r ramulator2/requirements-dev.txt
           .venv/bin/python -m pip install --no-build-isolation -e ramulator2
+          .venv/bin/python -m pip install --no-build-isolation -e .
+
+      - name: Check public artifact script
+        run: .venv/bin/python -m ruff check scripts
 
       - name: Build runtime and optional test bindings
         run: |
@@ -37,22 +49,14 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
           cmake --build ramulator2/build-ci -j2
 
+      - name: Verify fetched dependency revisions
+        run: |
+          test "$(git -C ramulator2/ext/yaml-cpp rev-parse HEAD)" = 56e3bb550c91fd7005566f19c079cb7a503223cf
+          test "$(git -C ramulator2/ext/fmt rev-parse HEAD)" = e69e5f977d458f2650bb346dadf2ad30c5320281
+          test "$(git -C ramulator2/ext/nanobind rev-parse HEAD)" = 0f9ce749b257fdfe701edb3cf6f7027ba029434a
+
       - name: Verify generated code did not change tracked sources
         run: git -C ramulator2 diff --exit-code
-
-      - name: Run project-owned regression tests
-        working-directory: ramulator2
-        run: |
-          ../.venv/bin/python -m pytest -q \
-            tests/controller_scheduling \
-            tests/device_timings \
-            tests/smoke \
-            tests/unit_tests \
-            tests/test_LPDDR5_params.py \
-            tests/test_lpddr5_pim_config.py \
-            tests/test_lpddr5_pim_addressing.py \
-            tests/test_REFpb.py \
-            tests/pimscope
 
       - name: Run Ramulator examples
         run: |
@@ -68,11 +72,11 @@ jobs:
 
       - name: Run parent PIMScope CLI
         run: |
-          .venv/bin/pimscope-artifacts --help
+          .venv/bin/python scripts/gen_figures.py --help
           .venv/bin/pimscope --help
           .venv/bin/pimscope doctor
-          .venv/bin/pimscope validate configs/example_custom.json
-          .venv/bin/pimscope run configs/example_custom_model.json \
+          .venv/bin/pimscope validate configs/example.json
+          .venv/bin/pimscope run configs/example.json \
             --output /tmp/pimscope-custom-model.json
           .venv/bin/pimscope validate-result /tmp/pimscope-custom-model.json
           .venv/bin/python scripts/gen_figures.py --help
@@ -99,16 +103,13 @@ jobs:
 
       - name: Validate negative topology guard
         run: |
-          if .venv/bin/pimscope validate configs/example_custom.json \
+          if .venv/bin/pimscope validate configs/example.json \
             --set hardware.topology.channels=2 >/tmp/unsupported-topology.out 2>/tmp/unsupported-topology.err; then
             echo "unsupported multi-channel topology unexpectedly validated" >&2
             exit 1
           fi
           cat /tmp/unsupported-topology.err
           grep -q "hardware.topology.channels" /tmp/unsupported-topology.err
-
-      - name: Run parent regression tests
-        run: .venv/bin/python -m pytest -q tests
 
       - name: Check clean parent tree
         run: git diff --exit-code

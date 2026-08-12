@@ -22,7 +22,11 @@ each under its own license:
 - yaml-cpp: https://github.com/jbeder/yaml-cpp
 - fmt: https://github.com/fmtlib/fmt
 - nanobind: https://github.com/wjakob/nanobind
-- argparse: https://github.com/p-ranav/argparse
+The checked-out build currently uses the first three dependencies above;
+`argparse` is used by the Python command-line interfaces and is not a CMake
+source dependency in this checkout. The fetched dependency license files are
+under `ramulator2/ext/*/LICENSE` after a build. Their terms remain independent
+of PIMScope.
 
 This NOTICE is informational and does not replace the corresponding upstream
 license files. Generated experiment results and figures should retain their
