@@ -6,15 +6,6 @@ single-bank and rank-scoped PIM commands, shared-block resource modeling,
 command/completion timing separation, PIM-aware trace frontends, workload
 lowering, and structural power-accounting hooks.
 
-The LPDDR5-PIM energy output preserves the paper's two-layer contract,
-`E_total = E_LPDDR + E_PIM`. `E_LPDDR` uses the embedded camera-ready
-LPDDR5-6400 IDD analysis profile and legacy conversion; result provenance
-records currents in mA, voltages in V, time in ns, output in pJ, and the
-retained `1e-3` scale. The PDF cites the DRAMPower IDD method but does not
-publish a device part number or machine-readable source profile, so these
-values are reproducibility inputs—not calibrated absolute device-energy data.
-`E_PIM` remains the separately reported incremental PIM event term.
-
 `ramulator2/` is a Git submodule pinned to a validated commit of the maintained
 [`TtitiO/ramulator2`](https://github.com/TtitiO/ramulator2) fork. The fork's
 `main` branch is based on current CMU-SAFARI `main`; PIMScope changes are kept
@@ -47,7 +38,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks, change ownership,
 and reproducibility requirements. Community participation follows
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). PIMScope software is released under
 [LICENSE](LICENSE), with upstream and third-party attribution in [NOTICE](NOTICE).
-The final arXiv and IEEE paper citations will be provided in this README.
+The final paper citations will be provided in this README.
 
 ## Supported environment
 
@@ -70,19 +61,17 @@ sudo apt-get install -y build-essential cmake python3 python3-dev python3-venv p
 
 ## Build and install
 
-Use `pimscope run` for normal experiments. `scripts/gen_figures.py` is a
-separate paper-reproduction tool, not a simulator plugin or public simulation
-API.
-
-Create one project-root virtual environment for the simulator and artifact
-scripts:
+Create one project-root virtual environment. Install the checked-out Ramulator
+fork before the parent package: the parent declares `ramulator==2.1.0`, and its
+implementation comes from the pinned submodule rather than an unrelated package
+from an index.
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -U pip setuptools wheel
 .venv/bin/python -m pip install -r ramulator2/requirements-dev.txt
-.venv/bin/python -m pip install -e .
 .venv/bin/python -m pip install --no-build-isolation -e ramulator2
+.venv/bin/python -m pip install --no-build-isolation -e .
 ```
 
 Build the public runtime backend. The test-only native harness is disabled by
@@ -106,42 +95,19 @@ If your default compiler produces binaries requiring a newer GLIBC than the
 target machine, select an older supported compiler explicitly, for example with
 `-DCMAKE_CXX_COMPILER=/path/to/clang++`.
 
-Run the two smoke examples:
+Check the installed package, native ABI, toolchain, and tutorial backend:
 
 ```bash
-(
-  cd ramulator2
-  ../.venv/bin/python examples/example_config.py
-  ../.venv/bin/python examples/lpddr5_pim_example_config.py
-)
+.venv/bin/pimscope doctor --config configs/example.json
 ```
 
-## Validation
+A successful report ends with `"valid": true`. If doctor reports a stale ABI,
+remove the build directory and rebuild with the same Python used to create the
+virtual environment.
 
-The upstream Ramulator test infrastructure is preserved. Tests that use the
-native controller/device harness require an opt-in build:
-
-```bash
-cmake -S ramulator2 -B ramulator2/build-tests \
-  -DPython_EXECUTABLE="$PWD/.venv/bin/python" \
-  -DRAMULATOR_TEST_BINDINGS=ON \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build ramulator2/build-tests -j"$(nproc)"
-(
-  cd ramulator2
-  ../.venv/bin/python -m pytest -q \
-    tests/controller_scheduling \
-    tests/device_timings \
-    tests/smoke \
-    tests/unit_tests \
-    tests/test_LPDDR5_params.py \
-    tests/test_lpddr5_pim_config.py \
-    tests/test_REFpb.py
-)
-```
-
-See [`ramulator2/README.md`](ramulator2/README.md) for the complete simulator
-guide and test suite.
+For lower-level Ramulator component examples and its separately maintained test
+suite, see [`ramulator2/README.md`](ramulator2/README.md). They are not required
+to follow the PIMScope workload tutorial below.
 
 ## Reproduce the paper artifacts
 
@@ -177,28 +143,50 @@ docker compose exec ramulator2 bash
 
 ## Configure workloads and LPDDR5-PIM
 
-The release supports LPDDR5-PIM. LPDDR6-PIM is retained in the maintained
-fork as an experimental development path and is not part of the supported
-one-workload tutorial or paper reproduction. Generic LPDDR6 is not
-interchangeable with LPDDR6PIM. Its remaining adaptation and validation work is
-tracked in the supported-scope section of [`CODE_QUALITY.md`](CODE_QUALITY.md).
+The release and paper artifacts support LPDDR5-PIM. The maintained fork also
+contains an explicitly experimental `LPDDR6PIM` backend for development and
+conformance testing; it is not used by this tutorial or the paper matrix.
+Generic `LPDDR6` is not interchangeable with `LPDDR6PIM`. The experimental
+backend's single-subchannel and non-device-calibrated power boundaries are
+machine-readable and documented in
+[`ramulator2/docs/PIMScope-metadata.md`](ramulator2/docs/PIMScope-metadata.md).
 
-## Run one workload
+## Tutorial: run one workload
 
-Custom studies use a versioned, validated JSON/YAML manifest and the installed
-`pimscope` CLI. The example composes an explicit reusable hardware file with an
-explicit workload file containing model dimensions and trace-generation
-parameters. Start with [`configs/example.json`](configs/example.json):
+The checked-in tutorial is a small two-layer `TinyTransformer` decode, so it
+exercises the complete generate → lower → native replay → validate path without
+running the full paper matrix. It composes:
+
+- [`configs/hardware/lpddr5-pim.json`](configs/hardware/lpddr5-pim.json), the
+  reusable supported hardware section; and
+- [`configs/workloads/tiny-transformer-decode.json`](configs/workloads/tiny-transformer-decode.json),
+  explicit model dimensions and trace-generation controls.
+
+First resolve and validate the manifest. `--no-backend` is useful before a
+native build; omit it to validate the resolved DRAM backend too.
 
 ```bash
-.venv/bin/pimscope doctor --config configs/example.json
+.venv/bin/pimscope validate configs/example.json --no-backend
 .venv/bin/pimscope validate configs/example.json
-.venv/bin/pimscope run configs/example.json \
-  --output results/tutorial/one-workload.json
-.venv/bin/pimscope validate-result results/tutorial/one-workload.json
 ```
 
-Small parameter sweeps can use command-line overrides without editing source:
+Then run and independently validate the saved result:
+
+```bash
+.venv/bin/pimscope run configs/example.json \
+  --output results/tutorial/tiny-transformer-decode.json
+.venv/bin/pimscope validate-result \
+  results/tutorial/tiny-transformer-decode.json
+```
+
+The result records the resolved manifest and fingerprint, hardware organization
+and timing, workload summary, concrete opcode counts, cycles, replay-integrity
+checks, power-accounting boundary, seed, and source provenance. A successful run
+has top-level `"status": "PASS"`.
+
+### Override parameters for a small sweep
+
+Use dotted `--set` overrides without editing source:
 
 ```bash
 .venv/bin/pimscope run configs/example.json \
@@ -209,10 +197,12 @@ Small parameter sweeps can use command-line overrides without editing source:
 
 The interface exposes organization/timing presets and overrides, PIM datatype
 and resources, shared-block grouping, timing and energy terms, scheduler,
-refresh, row policy, address/channel mappers, decode/prefill lengths, materialization,
-concurrency, an explicit recorded seed, lowering mode, built-in model keys, and
-custom dense model dimensions, external workload types, and an optional
-process-isolated simulation timeout. Unknown or inconsistent fields fail with a dotted-path error. The
+refresh, row policy, address/channel mappers, decode/prefill lengths,
+materialization, concurrency, an explicit recorded seed, lowering mode,
+built-in model keys, custom dense model dimensions, and an optional
+process-isolated simulation timeout. The current public workload type is
+`structured_transformer_surrogate`. Unknown or inconsistent fields fail with a
+dotted-path error. The
 first interface records and validates an explicit topology, but is deliberately
 bounded to the validated one-controller/channel PIM topology. Values
 other than `hardware.topology.controllers=1` and
@@ -223,16 +213,14 @@ multi-controller/channel simulation remains an explicit open issue. See
 [`configs/README.md`](configs/README.md) for the complete schema and current
 scope.
 
-The paper reproduction command intentionally remains fixed to the versioned
-paper configuration. The reusable researcher-facing simulator API is
-`ramulator.pimscope`. Both installed command names resolve directly to
-`ramulator.pimscope.cli:main`; there is no parent CLI implementation. Saved results and concrete traces can be
-validated independently with `pimscope validate-result` and
-`pimscope validate-trace`. Run `pimscope doctor` to verify the imported
-Ramulator package, native extension, selected PIM component, and optionally a
-manifest/backend before starting a larger experiment. The lower-level typed Python component API remains
-available for simulator developers, but architecture researchers should not
-need to edit generated C++ or the artifact scripts for ordinary sweeps.
+The reusable researcher-facing Python API is `ramulator.pimscope`. The parent
+installs `pimscope`; installing the submodule alone provides
+`ramulator-pimscope`. Both resolve to the same simulator-owned CLI, and there is
+no duplicate parent implementation. Saved results, aggregates, and concrete
+traces can be validated independently with `validate-result`,
+`validate-aggregate`, and `validate-trace`. The lower-level typed component API
+remains available for simulator developers, but ordinary sweeps require only a
+manifest and the CLI.
 
 ## Modeling scope
 

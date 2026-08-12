@@ -16,11 +16,12 @@ From the parent repository, use the `pimscope` command:
 ```
 
 The maintained Ramulator fork owns the same implementation and installs a
-standalone command for users of that repository alone:
+standalone command. From the parent repository, its self-contained example is:
 
 ```bash
-.venv/bin/ramulator-pimscope validate configs/example.json
-.venv/bin/ramulator-pimscope run configs/example.json
+.venv/bin/ramulator-pimscope validate ramulator2/examples/pimscope_custom_model.json
+.venv/bin/ramulator-pimscope run ramulator2/examples/pimscope_custom_model.json \
+  --output results/custom/ramulator-example.json
 ```
 
 The example composes two explicit and reusable sections:

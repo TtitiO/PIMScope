@@ -38,8 +38,24 @@ jobs:
           .venv/bin/python -m pip install --no-build-isolation -e ramulator2
           .venv/bin/python -m pip install --no-build-isolation -e .
 
-      - name: Check public artifact script
-        run: .venv/bin/python -m ruff check scripts
+      - name: Check public scripts, documentation links, and tutorial manifest
+        run: |
+          .venv/bin/python -m ruff check scripts
+          .venv/bin/python - <<'PY'
+          import re
+          from pathlib import Path
+
+          missing = []
+          for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", Path("README.md").read_text()):
+              if "://" in target or target.startswith("#"):
+                  continue
+              path = target.split("#", 1)[0]
+              if path and not Path(path).exists():
+                  missing.append(target)
+          if missing:
+              raise SystemExit(f"missing README links: {missing}")
+          PY
+          .venv/bin/pimscope validate configs/example.json --no-backend >/dev/null
 
       - name: Build runtime and optional test bindings
         run: |
@@ -91,7 +107,15 @@ jobs:
               "schema_version": 1,
               "schema_name": "pimscope-decode-aggregate-v1",
               "phase": "decode",
-              "rows": [{"cycles": 1, "runtime_ns": 1.0, "replay_status": "PASS"}],
+              "rows": [
+                  {
+                      "model_name": "CI fixture",
+                      "mode": "steady_state",
+                      "cycles": 1,
+                      "runtime_ns": 1.0,
+                      "replay_status": "PASS",
+                  }
+              ],
           }
           validate_aggregate(payload, kind="decode_cycles")
           Path("/tmp/pimscope-aggregate-check.json").write_text(
