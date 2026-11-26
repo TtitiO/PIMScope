@@ -1,4 +1,4 @@
-# PIMScope: Command-Level LPDDR-PIM Simulation for Transformer Inference
+# PIMScope: Augmenting Ramulator 2.0 with Command-Level LPDDR-PIM for Transformer Inference
 
 PIMScope is an open-source LPDDR5-PIM extension built on
 [Ramulator 2.1](https://github.com/CMU-SAFARI/ramulator2). It adds explicit
@@ -38,7 +38,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks, change ownership,
 and reproducibility requirements. Community participation follows
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). PIMScope software is released under
 [LICENSE](LICENSE), with upstream and third-party attribution in [NOTICE](NOTICE).
-The final paper citations will be provided in this README.
+See [Citation](#citation) below for the BibTeX entry.
 
 ## Supported environment
 
@@ -241,6 +241,22 @@ The exact execution contract and statistics are documented in the
 
 The current paper is available at [`paper/PIMScope_camera_ready.pdf`](paper/PIMScope_camera_ready.pdf).
 The released PDF has resolved citations and cross-references and embedded fonts.
+
+## Citation
+
+If you use PIMScope in your research, please cite this repository. The BibTeX
+entry below will be updated once the final IEEE publication details and DOI are
+available.
+
+```bibtex
+@misc{lin2026pimscope,
+  author       = {Lin, Ting and Wang, Runxi and Shaik, Jani Babu and Guo, Xinfei},
+  title        = {{PIMScope}: Augmenting {Ramulator} 2.0 with Command-Level {LPDDR-PIM} for Transformer Inference},
+  year         = {2026},
+  howpublished = {\url{https://github.com/TtitiO/PIMScope}},
+  note         = {GitHub repository}
+}
+```
 
 ## Updating Ramulator
 
